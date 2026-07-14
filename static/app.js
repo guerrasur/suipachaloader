@@ -528,7 +528,7 @@ function renderTabla() {
       <td>${escapeHtml(p.cliente_direccion)}</td>
       <td>${items}</td>
       <td class="right nowrap">${money(p.total)}</td>
-      <td class="nowrap">${p.metodo_pago}${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
+      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
       <td>${repartidorSelectHtml(p)}</td>
       <td><input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} /></td>
       <td class="right"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /></td>
@@ -606,6 +606,9 @@ async function loadResumen() {
       <button class="btn" id="btn-facturar">🧾 Facturar el día</button>
     </div>
     <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn ok" id="btn-facturar-todo">✅ Marcar todo como facturado</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
       <button class="btn secondary" id="btn-export-dia">⬇ Hoja del día</button>
     </div>
     <div class="stat" style="display:flex;align-items:center;justify-content:center;">
@@ -614,6 +617,25 @@ async function loadResumen() {
   $("btn-export").addEventListener("click", exportar);
   $("btn-export-dia").addEventListener("click", exportarDia);
   $("btn-facturar").addEventListener("click", openFacturacion);
+  $("btn-facturar-todo").addEventListener("click", facturarTodo);
+}
+
+// Marca todos los pedidos válidos del día como facturados de una sola vez
+// (cierre del día al pasar la lista completa a facturación).
+async function facturarTodo() {
+  const pendientes = state.pedidos.filter((p) => !p.anulado && !p.facturado).length;
+  if (!pendientes) return alert("No hay pedidos pendientes de facturar en este día.");
+  if (!confirm(`¿Marcar como facturados los ${pendientes} pedido(s) pendientes de este día?`)) return;
+  const btn = $("btn-facturar-todo");
+  btn.disabled = true; btn.textContent = "Marcando…";
+  try {
+    const r = await api("/api/pedidos/facturar-dia?fecha=" + state.fecha, { method: "POST" });
+    await loadDay();
+    alert(`Listo: ${r.facturados} pedido(s) marcados como facturados.`);
+  } catch (e) {
+    alert("Error: " + e.message);
+    btn.disabled = false; btn.textContent = "✅ Marcar todo como facturado";
+  }
 }
 
 async function exportarDia() {
@@ -776,6 +798,17 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+
+// Clase CSS de color según el método de pago (efectivo verde, transferencia
+// azul, etc.), igual que en la planilla de referencia.
+function pagoClase(metodo) {
+  return {
+    "Efectivo": "pago-efectivo",
+    "Transferencia": "pago-transferencia",
+    "QR": "pago-qr",
+    "Posnet": "pago-posnet",
+  }[metodo] || "pago-otro";
+}
 
 // HH:MM (24h) desde un ISO "YYYY-MM-DDTHH:MM:SS". El input type=time exige
 // ese formato exacto; no sirve toLocaleTimeString (devuelve "09:15 a. m.").
