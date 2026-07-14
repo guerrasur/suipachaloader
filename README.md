@@ -9,7 +9,20 @@ hoja por día.
 
 - Python 3.10+
 
-## Instalación y arranque (un solo comando)
+## Instalación y arranque
+
+### Windows (recomendado en el mostrador)
+
+Hacé **doble clic en `Iniciar_App.bat`** (en la raíz del proyecto). Ese archivo:
+
+- Detecta Python (`python` o el lanzador `py`).
+- La **primera vez** instala solo las dependencias (`requirements.txt`).
+- Levanta el servidor y **abre el navegador automáticamente** en
+  `http://127.0.0.1:8000/`.
+
+Para cerrar la app, cerrá la ventana negra que queda abierta.
+
+### Cualquier sistema (un solo comando)
 
 ```bash
 pip install -r requirements.txt
@@ -45,6 +58,7 @@ automáticamente. Al arrancar:
 ## Estructura
 
 ```
+Iniciar_App.bat        # arranque en Windows (doble clic)
 run.py                 # arranque en un comando (server + navegador)
 app/
   main.py              # FastAPI + montaje del frontend

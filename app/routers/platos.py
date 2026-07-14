@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Plato
-from ..schemas import AumentoIn, PlatoIn, PlatoOut
+from ..schemas import AumentoIn, PlatoIn, PlatoOut, SetPreciosIn
 
 router = APIRouter(prefix="/api/platos", tags=["platos"])
 
@@ -61,5 +61,30 @@ def aumentar_todos(data: AumentoIn, db: Session = Depends(get_db)):
     for p in platos:
         p.precio_efectivo = max(0.0, p.precio_efectivo + data.monto)
         p.precio_lista = max(0.0, p.precio_lista + data.monto)
+    db.commit()
+    return {"ok": True, "actualizados": len(platos)}
+
+
+@router.post("/set-precios")
+def fijar_precios(data: SetPreciosIn, db: Session = Depends(get_db)):
+    """Fija masivamente un precio (o los dos) en todos los platos activos.
+
+    Permite cambiar por separado el precio efectivo y el de lista: se aplica
+    sólo el campo enviado. Se excluye el "Plato del día" (precio manual). Los
+    pedidos ya cargados conservan su precio.
+    """
+    if data.precio_efectivo is None and data.precio_lista is None:
+        raise HTTPException(400, "Indicá al menos un precio a fijar")
+
+    platos = (
+        db.query(Plato)
+        .filter(Plato.activo.is_(True), Plato.es_plato_del_dia.is_(False))
+        .all()
+    )
+    for p in platos:
+        if data.precio_efectivo is not None:
+            p.precio_efectivo = max(0.0, data.precio_efectivo)
+        if data.precio_lista is not None:
+            p.precio_lista = max(0.0, data.precio_lista)
     db.commit()
     return {"ok": True, "actualizados": len(platos)}
