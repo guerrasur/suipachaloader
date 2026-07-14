@@ -1,4 +1,4 @@
-# Carabelas TKA — Gestor de Pedidos
+# Suipacha — Gestor de Pedidos
 
 Aplicación web **local** (single-user) para reemplazar el anotado manual de
 pedidos del local. Corre en la computadora del mostrador (`localhost`), guarda
@@ -51,8 +51,16 @@ automáticamente. Al arrancar:
 - **Pedidos para el día siguiente** (fecha futura) y **ventas de ventanilla**.
 - **Anulación** de pedidos (nunca se borran; no suman ni alertan).
 - **Resumen de caja** del día por método de pago.
-- **Exportación a Excel** mensual (`Carabelas_TKA_Pedidos_-_<Mes>_<Año>.xlsx`),
-  una hoja por día (`CarabelasTKA- DDMM`), regenerable sin duplicar hojas.
+- **Facturación de fin del día:** menú con la cantidad vendida de cada ítem
+  (platos, ensaladas, bebidas) **más los envíos**, en una columna por método
+  de pago (efectivo, transferencia, y QR / Posnet si se usaron). Así se
+  facturan juntos todos los pedidos en efectivo y, por separado, los de
+  transferencia.
+- **Exportación a Excel** mensual (`Suipacha_Pedidos_-_<Mes>_<Año>.xlsx`),
+  una hoja por día (`Suipacha- DDMM`), regenerable sin duplicar hojas.
+- **Exportación de la hoja del día** (`Suipacha_DD-MM-AAAA.xlsx`): un archivo
+  con solo la hoja de ese día, con el mismo nombre de hoja que en el mensual,
+  para pegarla al final del día en el Excel que junta todos los días del mes.
 - **Configuración** de todos los parámetros sin tocar código.
 
 ## Estructura
