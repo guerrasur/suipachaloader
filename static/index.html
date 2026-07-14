@@ -175,14 +175,34 @@
     <!-- ============ CARTA ============ -->
     <section id="view-carta" class="view">
       <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <h2>Carta (catálogo)</h2>
-          <div class="row">
-            <input type="number" id="aumento-monto" placeholder="$ aumento" step="100" style="width:120px;padding:.45rem;border:1px solid var(--line);border-radius:6px;" />
-            <button class="btn secondary" id="btn-aumentar">Aumentar todos +$X</button>
+        <h2>Carta (catálogo)</h2>
+
+        <div class="card" style="background:#f7f9fc;box-shadow:none;margin:.6rem 0;">
+          <div class="row" style="gap:1.4rem;">
+            <div class="field">
+              <label>Aumentar todos +$X (efectivo y lista)</label>
+              <div class="row">
+                <input type="number" id="aumento-monto" placeholder="$ aumento" step="100" style="width:120px;" />
+                <button class="btn secondary" id="btn-aumentar">Aumentar</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Fijar TODOS los precios en efectivo a $</label>
+              <div class="row">
+                <input type="number" id="set-efectivo" placeholder="$ efectivo" step="100" style="width:120px;" />
+                <button class="btn secondary" id="btn-set-efectivo">Aplicar</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Fijar TODOS los precios de lista a $</label>
+              <div class="row">
+                <input type="number" id="set-lista" placeholder="$ lista" step="100" style="width:120px;" />
+                <button class="btn secondary" id="btn-set-lista">Aplicar</button>
+              </div>
+            </div>
           </div>
+          <p class="muted" style="font-size:.82rem;margin:.6rem 0 0;">"Aumentar" suma el mismo monto a ambos precios. "Fijar" pone el mismo precio en todos los platos (efectivo y lista por separado). No afecta al "Plato del día" ni a los pedidos ya cargados.</p>
         </div>
-        <p class="muted" style="font-size:.85rem;">Los aumentos suman el mismo monto a ambos precios de todos los platos. Los pedidos ya cargados conservan su precio.</p>
         <div class="tbl-wrap">
           <table>
             <thead><tr><th>Nombre</th><th>Categoría</th><th class="right">Precio efectivo</th><th class="right">Precio lista</th><th>Activo</th><th></th></tr></thead>

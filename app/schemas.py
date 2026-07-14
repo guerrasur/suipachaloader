@@ -50,6 +50,17 @@ class AumentoIn(BaseModel):
     monto: float  # se suma a precio_efectivo y precio_lista de todos los platos
 
 
+class SetPreciosIn(BaseModel):
+    """Fija masivamente un precio (o los dos) en todos los platos activos.
+
+    Se envía sólo el/los campo(s) que se quieren fijar; el que viene en None
+    no se toca (permite cambiar sólo efectivo o sólo lista por separado).
+    """
+
+    precio_efectivo: float | None = None
+    precio_lista: float | None = None
+
+
 # --- Items y pedidos --------------------------------------------------------
 class ItemIn(BaseModel):
     plato_id: int | None = None

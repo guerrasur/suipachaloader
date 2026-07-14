@@ -10,22 +10,26 @@ from sqlalchemy.orm import Session
 
 from .models import Plato
 
+# Precios actuales del local: efectivo $10500 / lista $11500 (editables).
+EFECTIVO = 10500
+LISTA = 11500
+
 # (nombre, categoria, precio_efectivo, precio_lista) — precios editables.
 CATALOGO = [
-    ("Caesar", "Ensaladas", 8000, 8600),
-    ("Brie", "Ensaladas", 8000, 8600),
-    ("Cobb", "Ensaladas", 8000, 8600),
-    ("Clásica", "Ensaladas", 8000, 8600),
-    ("Cala", "Ensaladas", 8000, 8600),
-    ("Atún", "Ensaladas", 8000, 8600),
-    ("Falafel", "Ensaladas", 8000, 8600),
-    ("Porto", "Ensaladas", 8000, 8600),
-    ("Ravioles EyP", "Ravioles", 8000, 8600),
-    ("Ravioles con crema de hongos", "Ravioles", 8000, 8600),
-    ("Wrap Caesar con batatas", "Wraps", 8000, 8600),
-    ("Wrap de pollo a la Toscana", "Wraps", 8000, 8600),
-    ("Wrap Hummus", "Wraps", 8000, 8600),
-    ("Wrap Hummus con batatas", "Wraps", 8000, 8600),
+    ("Caesar", "Ensaladas", EFECTIVO, LISTA),
+    ("Brie", "Ensaladas", EFECTIVO, LISTA),
+    ("Cobb", "Ensaladas", EFECTIVO, LISTA),
+    ("Clásica", "Ensaladas", EFECTIVO, LISTA),
+    ("Cala", "Ensaladas", EFECTIVO, LISTA),
+    ("Atún", "Ensaladas", EFECTIVO, LISTA),
+    ("Falafel", "Ensaladas", EFECTIVO, LISTA),
+    ("Porto", "Ensaladas", EFECTIVO, LISTA),
+    ("Ravioles EyP", "Ravioles", EFECTIVO, LISTA),
+    ("Ravioles con crema de hongos", "Ravioles", EFECTIVO, LISTA),
+    ("Wrap Caesar con batatas", "Wraps", EFECTIVO, LISTA),
+    ("Wrap de pollo a la Toscana", "Wraps", EFECTIVO, LISTA),
+    ("Wrap Hummus", "Wraps", EFECTIVO, LISTA),
+    ("Wrap Hummus con batatas", "Wraps", EFECTIVO, LISTA),
     ("Coca / Coca Zero", "Bebidas", 3000, 3000),
 ]
 

@@ -522,6 +522,18 @@ $("btn-aumentar").addEventListener("click", async () => {
   alert(`Listo: ${r.actualizados} platos actualizados.`);
 });
 
+async function fijarPrecio(campo, inputId, etiqueta) {
+  const valor = +$(inputId).value;
+  if (!valor && valor !== 0) return alert("Ingresá el precio a fijar.");
+  if (!confirm(`¿Poner el precio ${etiqueta} de TODOS los platos en ${money(valor)}?`)) return;
+  const r = await api("/api/platos/set-precios", { method: "POST", body: JSON.stringify({ [campo]: valor }) });
+  $(inputId).value = "";
+  await loadCatalog(); loadCarta();
+  alert(`Listo: ${r.actualizados} platos con precio ${etiqueta} = ${money(valor)}.`);
+}
+$("btn-set-efectivo").addEventListener("click", () => fijarPrecio("precio_efectivo", "set-efectivo", "efectivo"));
+$("btn-set-lista").addEventListener("click", () => fijarPrecio("precio_lista", "set-lista", "de lista"));
+
 function openPlatoModal(p) {
   $("modal-plato-title").textContent = p ? "Editar plato" : "Nuevo plato";
   $("mp-id").value = p ? p.id : "";
