@@ -1,0 +1,14 @@
+# Base de datos y respaldos locales
+data/*.db
+backups/
+exports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Sistema
+.DS_Store

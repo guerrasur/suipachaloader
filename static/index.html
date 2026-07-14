@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carabelas TKA — Gestor de Pedidos</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥗</text></svg>" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Carabelas TKA · Pedidos</h1>
+    <nav class="tabs">
+      <button data-tab="pedidos" class="active">Pedidos</button>
+      <button data-tab="carta">Carta</button>
+      <button data-tab="config">Configuración</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ PEDIDOS ============ -->
+    <section id="view-pedidos" class="view active">
+      <div id="banner-pendientes" class="banner info"></div>
+
+      <div class="card">
+        <div class="row" style="justify-content: space-between;">
+          <h2 id="form-title">Nuevo pedido</h2>
+          <div class="daynav">
+            <button class="btn ghost sm" id="day-prev">◀</button>
+            <span class="today" id="day-label"></span>
+            <button class="btn ghost sm" id="day-next">▶</button>
+            <button class="btn secondary sm" id="day-today">Hoy</button>
+          </div>
+        </div>
+
+        <div id="banner-hora" class="banner warn"></div>
+
+        <form id="pedido-form">
+          <input type="hidden" id="pedido-id" />
+          <div class="row">
+            <div class="field grow autocomplete">
+              <label>Cliente</label>
+              <input id="f-cliente" autocomplete="off" placeholder="Nombre del cliente" />
+              <div class="ac-list hidden" id="ac-cliente"></div>
+            </div>
+            <div class="field grow">
+              <label>Dirección</label>
+              <input id="f-direccion" placeholder="Dirección" />
+            </div>
+            <div class="field grow">
+              <label>Indicaciones</label>
+              <input id="f-indicaciones" placeholder="Timbre, piso…" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label>Tipo</label>
+              <select id="f-tipo">
+                <option>Envío</option>
+                <option>Take away</option>
+                <option>Reserva</option>
+                <option>Ventanilla</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Fecha</label>
+              <input type="date" id="f-fecha" />
+            </div>
+            <div class="field">
+              <label>Método de pago</label>
+              <select id="f-pago">
+                <option>Efectivo</option>
+                <option>Transferencia</option>
+                <option>QR</option>
+                <option>Posnet</option>
+              </select>
+            </div>
+            <div class="field" id="wrap-vuelto">
+              <label>Paga con (vuelto)</label>
+              <input id="f-vuelto" placeholder="Justo o monto" />
+            </div>
+            <div class="field autocomplete" id="wrap-repartidor">
+              <label>Repartidor</label>
+              <input id="f-repartidor" autocomplete="off" placeholder="Nombre" />
+              <div class="ac-list hidden" id="ac-repartidor"></div>
+            </div>
+          </div>
+
+          <div class="field" style="margin:.6rem 0;">
+            <label>Ítems</label>
+            <div class="items-editor">
+              <div class="item-line" style="font-size:.75rem;color:var(--muted);">
+                <span>Plato</span><span>Cant.</span><span>Precio u.</span><span class="right">Subtotal</span><span></span>
+              </div>
+              <div id="items-list"></div>
+              <div class="row" style="margin-top:.4rem;">
+                <button type="button" class="btn secondary sm" id="add-item">+ Agregar plato</button>
+                <button type="button" class="btn ghost sm" id="add-pdd">+ Plato del día</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" id="row-envio">
+            <div class="field">
+              <label>Costo de envío</label>
+              <input type="number" id="f-envio" step="100" />
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <label style="font-weight:500;color:var(--ink);"><input type="checkbox" id="f-no-envio" /> No cobrar envío</label>
+            </div>
+            <div class="field">
+              <label>Descuento</label>
+              <select id="f-desc-tipo">
+                <option value="">Sin descuento</option>
+                <option value="monto">Monto $</option>
+                <option value="porcentaje">Porcentaje %</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Valor descuento</label>
+              <input type="number" id="f-desc-valor" step="100" value="0" />
+            </div>
+            <div class="field grow">
+              <label>Notas</label>
+              <input id="f-notas" placeholder="Opcional" />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:space-between;align-items:center;margin-top:.6rem;">
+            <div>
+              <span class="muted">Total</span>
+              <div class="total-box" id="f-total">$0</div>
+            </div>
+            <div class="row">
+              <button type="button" class="btn ghost" id="btn-cancelar">Cancelar</button>
+              <button type="submit" class="btn" id="btn-guardar">Guardar pedido</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Resumen de caja -->
+      <div class="card">
+        <h2>Resumen de caja del día</h2>
+        <div class="summary-grid" id="resumen"></div>
+      </div>
+
+      <!-- Tabla del día -->
+      <div class="card">
+        <div class="filters" id="filters">
+          <span class="muted">Filtros:</span>
+          <button class="chip active" data-f="todos">Todos</button>
+          <button class="chip" data-f="pend-salir">Pendientes de salir</button>
+          <button class="chip" data-f="pend-facturar">Pendientes de facturar</button>
+          <button class="chip" data-f="ventanilla">Ventanilla</button>
+          <button class="chip" data-f="envio">Envío</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="tabla">
+            <thead>
+              <tr>
+                <th>Hora</th><th>Tipo</th><th>Cliente</th><th>Dirección</th>
+                <th>Ítems</th><th class="right">Total</th><th>Pago</th>
+                <th>Repartidor</th><th>Salida</th><th>Fact.</th><th>Notas</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="tabla-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CARTA ============ -->
+    <section id="view-carta" class="view">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2>Carta (catálogo)</h2>
+          <div class="row">
+            <input type="number" id="aumento-monto" placeholder="$ aumento" step="100" style="width:120px;padding:.45rem;border:1px solid var(--line);border-radius:6px;" />
+            <button class="btn secondary" id="btn-aumentar">Aumentar todos +$X</button>
+          </div>
+        </div>
+        <p class="muted" style="font-size:.85rem;">Los aumentos suman el mismo monto a ambos precios de todos los platos. Los pedidos ya cargados conservan su precio.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Categoría</th><th class="right">Precio efectivo</th><th class="right">Precio lista</th><th>Activo</th><th></th></tr></thead>
+            <tbody id="carta-body"></tbody>
+          </table>
+        </div>
+        <div class="row" style="margin-top:.8rem;">
+          <button class="btn" id="btn-nuevo-plato">+ Nuevo plato</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CONFIG ============ -->
+    <section id="view-config" class="view">
+      <div class="card" style="max-width:520px;">
+        <h2>Configuración</h2>
+        <div class="field" style="margin-bottom:.6rem;">
+          <label>Minutos de demora para alerta de salida</label>
+          <input type="number" id="c-demora" />
+        </div>
+        <div class="field" style="margin-bottom:.6rem;">
+          <label>Hora de alerta de pedidos sin facturar (HH:MM)</label>
+          <input id="c-sinfact" placeholder="14:00" />
+        </div>
+        <div class="field" style="margin-bottom:.6rem;">
+          <label>Hora límite de toma de pedidos (HH:MM)</label>
+          <input id="c-limite" placeholder="13:40" />
+        </div>
+        <div class="field" style="margin-bottom:1rem;">
+          <label>Costo de envío por defecto</label>
+          <input type="number" id="c-envio" step="100" />
+        </div>
+        <button class="btn" id="btn-guardar-config">Guardar configuración</button>
+        <span id="config-ok" class="muted" style="margin-left:.6rem;"></span>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal genérico plato -->
+  <div class="modal-back" id="modal-plato">
+    <div class="modal">
+      <h2 id="modal-plato-title">Plato</h2>
+      <input type="hidden" id="mp-id" />
+      <div class="row">
+        <div class="field grow"><label>Nombre</label><input id="mp-nombre" /></div>
+        <div class="field"><label>Categoría</label><input id="mp-categoria" /></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Precio efectivo</label><input type="number" id="mp-ef" step="100" /></div>
+        <div class="field"><label>Precio lista</label><input type="number" id="mp-li" step="100" /></div>
+        <div class="field"><label>&nbsp;</label><label style="font-weight:500;"><input type="checkbox" id="mp-activo" checked /> Activo</label></div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+        <button class="btn ghost" id="mp-cancel">Cancelar</button>
+        <button class="btn" id="mp-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
