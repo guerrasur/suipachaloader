@@ -118,3 +118,19 @@ class RepartidorDia(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha: Mapped[date] = mapped_column(Date, index=True)
     nombre: Mapped[str] = mapped_column(String)
+
+
+class PlatoDia(Base):
+    """Plato del día para una fecha (o marca de que ese día no hay).
+
+    Se define al iniciar el día. ``hay=False`` significa que ese día no hay
+    plato del día. Cuando existe la fila, el día ya fue respondido.
+    """
+
+    __tablename__ = "plato_dia"
+
+    fecha: Mapped[date] = mapped_column(Date, primary_key=True)
+    hay: Mapped[bool] = mapped_column(Boolean, default=True)
+    nombre: Mapped[str] = mapped_column(String, default="")
+    precio_efectivo: Mapped[float] = mapped_column(Float, default=0.0)
+    precio_lista: Mapped[float] = mapped_column(Float, default=0.0)

@@ -169,6 +169,13 @@ class RepartidoresDiaIn(BaseModel):
     nombres: list[str] = []  # 1 o 2 nombres; vacíos se ignoran
 
 
+class PlatoDiaIn(BaseModel):
+    hay: bool = True  # False = ese día no hay plato del día
+    nombre: str = ""
+    precio_efectivo: float = 0.0
+    precio_lista: float = 0.0
+
+
 class ConfigIn(BaseModel):
     minutos_demora_salida: int | None = None
     hora_alerta_sin_facturar: str | None = None

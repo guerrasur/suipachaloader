@@ -27,7 +27,25 @@ const state = {
   filtro: "todos",
   pedidos: [],
   repartidoresDia: [],
+  platoDia: { definido: false, hay: false, nombre: "", precio_efectivo: 0, precio_lista: 0 },
 };
+
+// Precio "de los demás platos" para usar como default del plato del día:
+// el precio más frecuente del catálogo (así una bebida suelta no lo desvía).
+function precioDefaultPlatos() {
+  const platos = platosNormales();
+  return { ef: _moda(platos.map((p) => p.precio_efectivo)), li: _moda(platos.map((p) => p.precio_lista)) };
+}
+function _moda(nums) {
+  const cont = {};
+  let mejor = 0, mejorN = -1;
+  for (const n of nums) {
+    if (!n) continue;
+    cont[n] = (cont[n] || 0) + 1;
+    if (cont[n] > mejorN) { mejorN = cont[n]; mejor = n; }
+  }
+  return mejor;
+}
 
 // --------------------------------------------------------------------- tabs
 document.querySelectorAll(".tabs button").forEach((b) =>
@@ -57,8 +75,20 @@ function precioSegunMetodo(plato) {
 
 function addItem(pdd = false) {
   if (pdd) {
-    const p = platoDelDia();
-    state.items.push({ plato_id: p ? p.id : null, nombre: "", precio_unitario: 0, cantidad: 1, es_pdd: true });
+    // Se precarga con el plato del día definido para la fecha (nombre y
+    // precio según método), pero nombre y precio quedan editables.
+    const d = state.platoDia;
+    const ef = d.hay && d.precio_efectivo ? d.precio_efectivo : 0;
+    const li = d.hay && d.precio_lista ? d.precio_lista : 0;
+    state.items.push({
+      plato_id: null,
+      nombre: d.hay ? d.nombre : "",
+      precio_efectivo: ef,   // se usan para reaplicar precio al cambiar método
+      precio_lista: li,
+      precio_unitario: $("f-pago").value === "Efectivo" ? ef : li,
+      cantidad: 1,
+      es_pdd: true,
+    });
   } else {
     const first = platosNormales()[0];
     state.items.push({
@@ -123,12 +153,16 @@ function renderItems() {
   recalc();
 }
 
-// Re-aplicar precio según método a los ítems de catálogo (no al plato del día)
+// Re-aplicar precio según método a los ítems de catálogo y al plato del día
+// (que trae sus dos precios); un plato del día manual sin precios no se toca.
 function reapplyPrices() {
+  const efectivo = $("f-pago").value === "Efectivo";
   state.items.forEach((it) => {
     if (!it.es_pdd && it.plato_id) {
       const p = state.platos.find((x) => x.id === it.plato_id);
       if (p) it.precio_unitario = precioSegunMetodo(p);
+    } else if (it.es_pdd && (it.precio_efectivo || it.precio_lista)) {
+      it.precio_unitario = efectivo ? it.precio_efectivo : it.precio_lista;
     }
   });
   renderItems();
@@ -302,8 +336,14 @@ function fillRepartidorSelect(sel, actual) {
   sel.value = actual || "";
 }
 
+// Callback opcional para encadenar preguntas de inicio del día.
+let onRepModalClosed = null;
+function fireRepClosed() {
+  if (typeof onRepModalClosed === "function") { const cb = onRepModalClosed; onRepModalClosed = null; cb(); }
+}
+
 $("btn-repartidores").addEventListener("click", openRepModal);
-$("rep-cancel").addEventListener("click", () => $("modal-rep").classList.remove("show"));
+$("rep-cancel").addEventListener("click", () => { $("modal-rep").classList.remove("show"); fireRepClosed(); });
 $("rep-save").addEventListener("click", async () => {
   const nombres = [$("rep-1").value.trim(), $("rep-2").value.trim()].filter(Boolean);
   await api("/api/repartidores-dia?fecha=" + state.fecha, {
@@ -312,6 +352,7 @@ $("rep-save").addEventListener("click", async () => {
   $("modal-rep").classList.remove("show");
   await loadRepartidoresDia();
   renderTabla();
+  fireRepClosed();
 });
 
 async function openRepModal() {
@@ -325,6 +366,63 @@ async function openRepModal() {
   } catch (e) {}
   $("modal-rep").classList.add("show");
 }
+
+// -------------------------------------------------------- plato del día (día)
+async function loadPlatoDia() {
+  const d = await api("/api/plato-del-dia?fecha=" + state.fecha);
+  state.platoDia = d;
+  const lbl = $("pdd-dia-label");
+  if (d.definido && d.hay) lbl.textContent = d.nombre || "Plato del día";
+  else if (d.definido && !d.hay) lbl.textContent = "Sin plato del día";
+  else lbl.textContent = "Plato del día";
+  // El botón "+ Plato del día" del formulario refleja el del día.
+  $("add-pdd").textContent = (d.definido && d.hay && d.nombre)
+    ? `+ ${d.nombre}` : "+ Plato del día";
+}
+
+$("btn-plato-dia").addEventListener("click", openPddModal);
+$("pdd-cancel").addEventListener("click", () => $("modal-pdd").classList.remove("show"));
+$("pdd-hay").addEventListener("change", () => {
+  $("pdd-campos").style.display = $("pdd-hay").checked ? "" : "none";
+});
+$("pdd-igualar").addEventListener("click", () => {
+  const def = precioDefaultPlatos();
+  $("pdd-ef").value = def.ef;
+  $("pdd-li").value = def.li;
+});
+$("pdd-save").addEventListener("click", async () => {
+  const hay = $("pdd-hay").checked;
+  const body = {
+    hay,
+    nombre: hay ? $("pdd-nombre").value.trim() : "",
+    precio_efectivo: hay ? (+$("pdd-ef").value || 0) : 0,
+    precio_lista: hay ? (+$("pdd-li").value || 0) : 0,
+  };
+  if (hay && !body.nombre) return alert("Poné el nombre del plato del día (o destildá \"Hoy hay plato del día\").");
+  await api("/api/plato-del-dia?fecha=" + state.fecha, { method: "PUT", body: JSON.stringify(body) });
+  $("modal-pdd").classList.remove("show");
+  await loadPlatoDia();
+  if (typeof onPddModalClosed === "function") { const cb = onPddModalClosed; onPddModalClosed = null; cb(); }
+});
+
+function openPddModal() {
+  $("pdd-modal-fecha").textContent = state.fecha === todayISO()
+    ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
+  const d = state.platoDia;
+  const def = precioDefaultPlatos();
+  $("pdd-hay").checked = d.definido ? d.hay : true;
+  $("pdd-campos").style.display = $("pdd-hay").checked ? "" : "none";
+  $("pdd-nombre").value = d.nombre || "";
+  $("pdd-ef").value = d.hay && d.precio_efectivo ? d.precio_efectivo : def.ef;
+  $("pdd-li").value = d.hay && d.precio_lista ? d.precio_lista : def.li;
+  $("modal-pdd").classList.add("show");
+}
+
+// Callback opcional para encadenar el modal de plato del día al inicio del día.
+let onPddModalClosed = null;
+$("pdd-cancel").addEventListener("click", () => {
+  if (typeof onPddModalClosed === "function") { const cb = onPddModalClosed; onPddModalClosed = null; cb(); }
+});
 
 function setupAutocomplete(inputId, listId, fetcher) {
   const input = $(inputId), list = $(listId);
@@ -368,6 +466,7 @@ async function loadDay() {
   const label = state.fecha === todayISO() ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
   $("day-label").textContent = label;
   await loadRepartidoresDia();
+  await loadPlatoDia();
   state.pedidos = await api("/api/pedidos?fecha=" + state.fecha);
   renderTabla();
   loadResumen();
@@ -420,8 +519,8 @@ function renderTabla() {
     const items = p.items.map((i) => `${i.cantidad}x ${escapeHtml(i.nombre)}`).join("<br>");
     const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
                    (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span>' : "");
-    const hs = p.hora_salida ? new Date(p.hora_salida).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "";
-    const hp = new Date(p.hora_pedido).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+    const hs = hhmm(p.hora_salida);
+    const hp = hhmm(p.hora_pedido);
     tr.innerHTML = `
       <td class="nowrap">${hp} ${badges}</td>
       <td>${p.tipo}</td>
@@ -636,6 +735,10 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
 
+// HH:MM (24h) desde un ISO "YYYY-MM-DDTHH:MM:SS". El input type=time exige
+// ese formato exacto; no sirve toLocaleTimeString (devuelve "09:15 a. m.").
+function hhmm(iso) { return iso ? String(iso).slice(11, 16) : ""; }
+
 // ------------------------------------------------------------------- init
 (async function init() {
   await loadCatalog();
@@ -644,10 +747,17 @@ function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
   resetForm();
   await loadDay();
   await loadPendientes();
-  // Al iniciar el día: si es hoy y todavía no se cargaron los repartidores,
-  // preguntarlos apenas abre la app.
-  if (state.fecha === todayISO() && state.repartidoresDia.length === 0) {
-    openRepModal();
+  // Al iniciar el día (si es hoy): preguntar los repartidores y el plato del
+  // día que todavía no se hayan cargado, uno después del otro.
+  if (state.fecha === todayISO()) {
+    const necesitaRep = state.repartidoresDia.length === 0;
+    const necesitaPdd = !state.platoDia.definido;
+    if (necesitaRep) {
+      onRepModalClosed = necesitaPdd ? openPddModal : null;
+      openRepModal();
+    } else if (necesitaPdd) {
+      openPddModal();
+    }
   }
   // Auto-refresco de alertas cada minuto (recalcula demoras/sin facturar).
   setInterval(loadDay, 60000);
