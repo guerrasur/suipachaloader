@@ -602,11 +602,53 @@ async function loadResumen() {
     <div class="stat"><div class="k">Transferencia</div><div class="v">${money(r.por_metodo.Transferencia)}</div></div>
     <div class="stat"><div class="k">QR</div><div class="v">${money(r.por_metodo.QR)}</div></div>
     <div class="stat"><div class="k">Posnet</div><div class="v">${money(r.por_metodo.Posnet)}</div></div>
-    <div class="stat" style="grid-column:span 2;display:flex;align-items:center;justify-content:center;">
-      <button class="btn" id="btn-export">⬇ Exportar Excel del mes</button>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn" id="btn-facturar">🧾 Facturar el día</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn secondary" id="btn-export-dia">⬇ Hoja del día</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn" id="btn-export">⬇ Excel del mes</button>
     </div>`;
   $("btn-export").addEventListener("click", exportar);
+  $("btn-export-dia").addEventListener("click", exportarDia);
+  $("btn-facturar").addEventListener("click", openFacturacion);
 }
+
+async function exportarDia() {
+  window.location = "/api/export/dia?fecha=" + state.fecha;
+}
+
+// ------------------------------------------------------ facturación del día
+async function openFacturacion() {
+  const r = await api("/api/facturacion?fecha=" + state.fecha);
+  $("fact-fecha").textContent = state.fecha === todayISO()
+    ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
+  const cont = $("fact-cols");
+  if (!r.metodos.length) {
+    cont.innerHTML = `<p class="muted">No hay pedidos para facturar este día.</p>`;
+  } else {
+    cont.innerHTML = r.metodos.map((m) => {
+      const d = r.por_metodo[m];
+      const filas = d.items.map((it) =>
+        `<li><b>${it.cantidad}</b> ${escapeHtml(it.nombre)}</li>`).join("");
+      const envios = d.envios > 0
+        ? `<li class="fact-envio"><b>${d.envios}</b> ${d.envios === 1 ? "envío" : "envíos"}</li>` : "";
+      return `
+        <div class="fact-col">
+          <div class="fact-head">${escapeHtml(m)}</div>
+          <ul class="fact-list">${filas}${envios}</ul>
+          <div class="fact-foot">
+            <span>${d.pedidos} pedido${d.pedidos === 1 ? "" : "s"}</span>
+            <span>${money(d.total)}</span>
+          </div>
+        </div>`;
+    }).join("");
+  }
+  $("modal-fact").classList.add("show");
+}
+$("fact-cerrar").addEventListener("click", () => $("modal-fact").classList.remove("show"));
 
 async function exportar() {
   const btn = $("btn-export"); btn.disabled = true; btn.textContent = "Generando…";

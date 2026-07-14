@@ -1,7 +1,7 @@
 """Exportación a Excel mensual con openpyxl.
 
-- Un archivo por mes: ``Carabelas_TKA_Pedidos_-_<Mes>_<Año>.xlsx``.
-- Una hoja por día, nombrada ``CarabelasTKA- DDMM``.
+- Un archivo por mes: ``Suipacha_Pedidos_-_<Mes>_<Año>.xlsx``.
+- Una hoja por día, nombrada ``Suipacha- DDMM``.
 - Si la hoja del día ya existe se **regenera completa** desde la BD (se borra
   y se reescribe), nunca se duplica ni se parchea.
 - Los pedidos anulados aparecen marcados como ``ANULADO`` y no suman.
@@ -45,11 +45,15 @@ _MONEY = '#,##0'
 
 
 def nombre_archivo(anio: int, mes: int) -> str:
-    return f"Carabelas_TKA_Pedidos_-_{MESES[mes]}_{anio}.xlsx"
+    return f"Suipacha_Pedidos_-_{MESES[mes]}_{anio}.xlsx"
 
 
 def nombre_hoja(d: date) -> str:
-    return f"CarabelasTKA- {d.strftime('%d%m')}"
+    return f"Suipacha- {d.strftime('%d%m')}"
+
+
+def nombre_archivo_dia(d: date) -> str:
+    return f"Suipacha_{d.strftime('%d-%m-%Y')}.xlsx"
 
 
 def _items_texto(p: Pedido) -> str:
@@ -88,6 +92,27 @@ def exportar_mes(db: Session, anio: int, mes: int) -> Path:
     return ruta
 
 
+def exportar_dia(db: Session, d: date) -> Path:
+    """Genera un archivo con SOLO la hoja de ese día (misma hoja que en el
+    mensual, ``Suipacha- DDMM``). Sirve para cargar/pegar esa hoja al final
+    del día dentro del Excel del mes que junta todos los días."""
+    EXPORT_DIR.mkdir(exist_ok=True)
+    ruta = EXPORT_DIR / nombre_archivo_dia(d)
+
+    pedidos = (
+        db.query(Pedido)
+        .filter(Pedido.fecha == d)
+        .order_by(Pedido.hora_pedido)
+        .all()
+    )
+
+    wb = Workbook()
+    wb.remove(wb.active)  # sacamos la hoja vacía por defecto
+    _regenerar_hoja(wb, d, pedidos)
+    wb.save(ruta)
+    return ruta
+
+
 def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
     titulo = nombre_hoja(d)
     if titulo in wb.sheetnames:
@@ -100,7 +125,7 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
 
     # Título.
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(COLUMNAS))
-    tcell = ws.cell(row=1, column=1, value=f"Carabelas TKA — Pedidos {d.strftime('%d/%m/%Y')}")
+    tcell = ws.cell(row=1, column=1, value=f"Suipacha — Pedidos {d.strftime('%d/%m/%Y')}")
     tcell.font = _TITLE_FONT
 
     # Encabezados.

@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from .. import config as cfg
 from ..database import get_db
-from ..excel_export import exportar_mes, nombre_archivo
+from ..excel_export import (
+    exportar_dia,
+    exportar_mes,
+    nombre_archivo,
+    nombre_archivo_dia,
+)
 from ..models import Pedido, PlatoDia, RepartidorDia
 from ..schemas import ConfigIn, PlatoDiaIn, RepartidoresDiaIn
 
@@ -48,6 +53,62 @@ def resumen(fecha: date | None = None, db: Session = Depends(get_db)):
         "cantidad": len(pedidos),
         "total": round(total, 2),
         "por_metodo": {k: round(v, 2) for k, v in por_metodo.items()},
+    }
+
+
+# --- Facturación de fin del día ---------------------------------------------
+@router.get("/facturacion")
+def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
+    """Cierre para facturar: por cada método de pago, cuántas unidades de cada
+    ítem se vendieron y cuántos envíos hubo. Así se facturan juntos todos los
+    pedidos en efectivo y, por separado, todos los de transferencia (y QR /
+    Posnet si se usaron ese día)."""
+    fecha = fecha or date.today()
+    pedidos = (
+        db.query(Pedido)
+        .filter(Pedido.fecha == fecha, Pedido.anulado.is_(False))
+        .all()
+    )
+
+    # Acumulador por método: items (nombre -> cantidad), envíos, pedidos, total.
+    acum: dict[str, dict] = {}
+
+    def bucket(metodo: str) -> dict:
+        return acum.setdefault(
+            metodo, {"items": {}, "envios": 0, "pedidos": 0, "total": 0.0}
+        )
+
+    for p in pedidos:
+        b = bucket(p.metodo_pago)
+        b["pedidos"] += 1
+        b["total"] += p.total
+        # Un envío = un pedido de tipo "Envío" (más allá de si se cobró o no).
+        if p.tipo == "Envío":
+            b["envios"] += 1
+        for it in p.items:
+            nombre = (it.nombre or "").strip() or "(sin nombre)"
+            b["items"][nombre] = b["items"].get(nombre, 0) + it.cantidad
+
+    # Orden de columnas: primero los métodos habituales, luego el resto usado.
+    orden = ["Efectivo", "Transferencia", "QR", "Posnet"]
+    metodos = [m for m in orden if m in acum] + [m for m in acum if m not in orden]
+
+    def serializar(b: dict) -> dict:
+        items = sorted(
+            ({"nombre": n, "cantidad": c} for n, c in b["items"].items()),
+            key=lambda x: (-x["cantidad"], x["nombre"].lower()),
+        )
+        return {
+            "items": items,
+            "envios": b["envios"],
+            "pedidos": b["pedidos"],
+            "total": round(b["total"], 2),
+        }
+
+    return {
+        "fecha": fecha.isoformat(),
+        "metodos": metodos,
+        "por_metodo": {m: serializar(acum[m]) for m in metodos},
     }
 
 
@@ -159,4 +220,16 @@ def descargar(anio: int, mes: int, db: Session = Depends(get_db)):
         ruta,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=nombre_archivo(anio, mes),
+    )
+
+
+# Exportación de un solo día (una hoja) para pegar al Excel del mes.
+@router.get("/export/dia")
+def descargar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+    fecha = fecha or date.today()
+    ruta = exportar_dia(db, fecha)
+    return FileResponse(
+        ruta,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=nombre_archivo_dia(fecha),
     )

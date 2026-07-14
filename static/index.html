@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Carabelas TKA — Gestor de Pedidos</title>
+  <title>Suipacha — Gestor de Pedidos</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥗</text></svg>" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>Carabelas TKA · Pedidos</h1>
+    <h1>Suipacha · Pedidos</h1>
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Pedidos</button>
       <button data-tab="carta">Carta</button>
@@ -295,6 +295,19 @@
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn ghost" id="pdd-cancel">Cancelar</button>
         <button class="btn" id="pdd-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal facturación fin del día -->
+  <div class="modal-back" id="modal-fact">
+    <div class="modal modal-wide">
+      <h2>Facturación del día</h2>
+      <p class="muted" id="fact-fecha" style="margin-top:0;"></p>
+      <p class="muted" style="font-size:.85rem;">Cantidad vendida de cada ítem (incluye envíos), separada por método de pago. Facturá juntos todos los pedidos de cada columna.</p>
+      <div id="fact-cols" class="fact-cols"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+        <button class="btn" id="fact-cerrar">Cerrar</button>
       </div>
     </div>
   </div>

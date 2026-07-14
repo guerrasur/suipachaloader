@@ -15,7 +15,7 @@ from .seed import seed_platos
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Carabelas TKA — Gestor de Pedidos")
+app = FastAPI(title="Suipacha — Gestor de Pedidos")
 
 
 @app.on_event("startup")
