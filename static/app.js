@@ -113,9 +113,16 @@ function renderItems() {
     if (it.es_pdd) {
       selHtml = `<input data-idx="${idx}" class="it-nombre" placeholder="Plato del día (nombre)" value="${escapeAttr(it.nombre)}" />`;
     } else {
-      const opts = platosNormales()
+      const normales = platosNormales();
+      let opts = normales
         .map((p) => `<option value="${p.id}" ${p.id === it.plato_id ? "selected" : ""}>${escapeHtml(p.nombre)}</option>`)
         .join("");
+      // Si el plato del ítem ya no está activo (dado de baja), no aparece en el
+      // catálogo: agregamos una opción con su nombre guardado para no perder el
+      // dato al editar un pedido viejo.
+      if (it.plato_id != null && !normales.some((p) => p.id === it.plato_id)) {
+        opts = `<option value="${it.plato_id}" selected>${escapeHtml(it.nombre)} (baja)</option>` + opts;
+      }
       selHtml = `<select data-idx="${idx}" class="it-plato">${opts}</select>`;
     }
 
@@ -132,6 +139,7 @@ function renderItems() {
     s.addEventListener("change", (e) => {
       const i = +e.target.dataset.idx;
       const p = state.platos.find((x) => x.id === +e.target.value);
+      if (!p) return; // opción "(baja)": no está en el catálogo, no reasignar.
       state.items[i].plato_id = p.id;
       state.items[i].nombre = p.nombre;
       state.items[i].precio_unitario = precioSegunMetodo(p);
@@ -381,7 +389,6 @@ async function loadPlatoDia() {
 }
 
 $("btn-plato-dia").addEventListener("click", openPddModal);
-$("pdd-cancel").addEventListener("click", () => $("modal-pdd").classList.remove("show"));
 $("pdd-hay").addEventListener("change", () => {
   $("pdd-campos").style.display = $("pdd-hay").checked ? "" : "none";
 });
@@ -421,6 +428,7 @@ function openPddModal() {
 // Callback opcional para encadenar el modal de plato del día al inicio del día.
 let onPddModalClosed = null;
 $("pdd-cancel").addEventListener("click", () => {
+  $("modal-pdd").classList.remove("show");
   if (typeof onPddModalClosed === "function") { const cb = onPddModalClosed; onPddModalClosed = null; cb(); }
 });
 
@@ -596,7 +604,7 @@ async function loadResumen() {
   const r = await api("/api/resumen?fecha=" + state.fecha);
   const g = $("resumen");
   g.innerHTML = `
-    <div class="stat"><div class="k">Total del día</div><div class="v">${money(r.total)}</div></div>
+    <div class="stat stat-total"><div class="k">Total del día</div><div class="v">${money(r.total)}</div></div>
     <div class="stat"><div class="k">Pedidos</div><div class="v">${r.cantidad}</div></div>
     <div class="stat"><div class="k">Efectivo</div><div class="v">${money(r.por_metodo.Efectivo)}</div></div>
     <div class="stat"><div class="k">Transferencia</div><div class="v">${money(r.por_metodo.Transferencia)}</div></div>
@@ -760,5 +768,16 @@ function hhmm(iso) { return iso ? String(iso).slice(11, 16) : ""; }
     }
   }
   // Auto-refresco de alertas cada minuto (recalcula demoras/sin facturar).
-  setInterval(loadDay, 60000);
+  // Se saltea si el usuario está en el medio de algo, para no pisar lo que
+  // está tipeando ni cerrar un modal abierto.
+  setInterval(() => { if (!estaOcupado()) loadDay(); }, 60000);
 })();
+
+// El refresco automático no debe interrumpir al usuario: hay un modal abierto,
+// o el foco está dentro de la tabla (edición inline) o del formulario de carga.
+function estaOcupado() {
+  if (document.querySelector(".modal-back.show")) return true;
+  const el = document.activeElement;
+  if (el && typeof el.closest === "function" && el.closest("#tabla, #pedido-form")) return true;
+  return false;
+}

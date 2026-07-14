@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Carabelas TKA · Pedidos</h1>
+    <h1>🥗 Carabelas TKA · Pedidos</h1>
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Pedidos</button>
       <button data-tab="carta">Carta</button>
@@ -23,15 +23,15 @@
       <div id="banner-pendientes" class="banner info"></div>
 
       <div class="card">
-        <div class="row" style="justify-content: space-between;">
+        <div class="row between">
           <h2 id="form-title">Nuevo pedido</h2>
           <div class="daynav">
-            <button class="btn secondary sm" id="btn-repartidores">🛵 <span id="rep-dia-label">Repartidores</span></button>
-            <button class="btn secondary sm" id="btn-plato-dia">🍽 <span id="pdd-dia-label">Plato del día</span></button>
-            <button class="btn ghost sm" id="day-prev">◀</button>
+            <button type="button" class="btn secondary sm" id="btn-repartidores" title="Repartidores del día">🛵 <span id="rep-dia-label">Repartidores</span></button>
+            <button type="button" class="btn secondary sm" id="btn-plato-dia" title="Plato del día">🍽 <span id="pdd-dia-label">Plato del día</span></button>
+            <button type="button" class="btn ghost sm" id="day-prev" title="Día anterior" aria-label="Día anterior">◀</button>
             <span class="today" id="day-label"></span>
-            <button class="btn ghost sm" id="day-next">▶</button>
-            <button class="btn secondary sm" id="day-today">Hoy</button>
+            <button type="button" class="btn ghost sm" id="day-next" title="Día siguiente" aria-label="Día siguiente">▶</button>
+            <button type="button" class="btn secondary sm" id="day-today">Hoy</button>
           </div>
         </div>
 
@@ -178,7 +178,7 @@
       <div class="card">
         <h2>Carta (catálogo)</h2>
 
-        <div class="card" style="background:#f7f9fc;box-shadow:none;margin:.6rem 0;">
+        <div class="panel" style="margin:.6rem 0;">
           <div class="row" style="gap:1.4rem;">
             <div class="field">
               <label>Aumentar todos +$X (efectivo y lista)</label>
