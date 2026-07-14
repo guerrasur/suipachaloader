@@ -165,6 +165,10 @@ class PedidoOut(BaseModel):
     notas: str
 
 
+class RepartidoresDiaIn(BaseModel):
+    nombres: list[str] = []  # 1 o 2 nombres; vacíos se ignoran
+
+
 class ConfigIn(BaseModel):
     minutos_demora_salida: int | None = None
     hora_alerta_sin_facturar: str | None = None

@@ -26,6 +26,7 @@ const state = {
   editId: null,
   filtro: "todos",
   pedidos: [],
+  repartidoresDia: [],
 };
 
 // --------------------------------------------------------------------- tabs
@@ -258,6 +259,7 @@ function resetForm() {
   $("f-envio").value = _cfgCache ? _cfgCache.costo_envio_default : 3000;
   $("form-title").textContent = "Nuevo pedido";
   $("btn-guardar").textContent = "Guardar pedido";
+  fillRepartidorSelect($("f-repartidor"), "");
   renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla(); checkHoraLimite();
 }
 
@@ -280,11 +282,49 @@ setupAutocomplete("f-cliente", "ac-cliente", async (q) => {
   }));
 });
 
-setupAutocomplete("f-repartidor", "ac-repartidor", async (q) => {
-  const rs = await api("/api/pedidos/repartidores");
-  return rs.filter((r) => r.toLowerCase().includes(q.toLowerCase()))
-    .map((r) => ({ label: r, onPick: () => { $("f-repartidor").value = r; } }));
+// ------------------------------------------------------ repartidores del día
+async function loadRepartidoresDia() {
+  const r = await api("/api/repartidores-dia?fecha=" + state.fecha);
+  state.repartidoresDia = r.nombres;
+  fillRepartidorSelect($("f-repartidor"), $("f-repartidor").value);
+  const lbl = $("rep-dia-label");
+  lbl.textContent = r.nombres.length ? r.nombres.join(" / ") : "Repartidores";
+}
+
+// Llena un <select> con "(sin asignar)" + repartidores del día. Si el valor
+// actual no está en la lista (ej. un pedido viejo), se agrega para no perderlo.
+function fillRepartidorSelect(sel, actual) {
+  const nombres = [...state.repartidoresDia];
+  if (actual && !nombres.includes(actual)) nombres.push(actual);
+  sel.innerHTML =
+    `<option value="">(sin asignar)</option>` +
+    nombres.map((n) => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join("");
+  sel.value = actual || "";
+}
+
+$("btn-repartidores").addEventListener("click", openRepModal);
+$("rep-cancel").addEventListener("click", () => $("modal-rep").classList.remove("show"));
+$("rep-save").addEventListener("click", async () => {
+  const nombres = [$("rep-1").value.trim(), $("rep-2").value.trim()].filter(Boolean);
+  await api("/api/repartidores-dia?fecha=" + state.fecha, {
+    method: "PUT", body: JSON.stringify({ nombres }),
+  });
+  $("modal-rep").classList.remove("show");
+  await loadRepartidoresDia();
+  renderTabla();
 });
+
+async function openRepModal() {
+  $("rep-modal-fecha").textContent = state.fecha === todayISO()
+    ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
+  $("rep-1").value = state.repartidoresDia[0] || "";
+  $("rep-2").value = state.repartidoresDia[1] || "";
+  try {
+    const hist = await api("/api/pedidos/repartidores");
+    $("rep-historial").innerHTML = hist.map((h) => `<option value="${escapeAttr(h)}">`).join("");
+  } catch (e) {}
+  $("modal-rep").classList.add("show");
+}
 
 function setupAutocomplete(inputId, listId, fetcher) {
   const input = $(inputId), list = $(listId);
@@ -327,6 +367,7 @@ async function loadDay() {
   $("f-fecha").value = state.fecha;
   const label = state.fecha === todayISO() ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
   $("day-label").textContent = label;
+  await loadRepartidoresDia();
   state.pedidos = await api("/api/pedidos?fecha=" + state.fecha);
   renderTabla();
   loadResumen();
@@ -358,6 +399,14 @@ function pasaFiltro(p) {
   }
 }
 
+function repartidorSelectHtml(p) {
+  const nombres = [...state.repartidoresDia];
+  if (p.repartidor && !nombres.includes(p.repartidor)) nombres.push(p.repartidor);
+  const opts = `<option value="">(sin asignar)</option>` +
+    nombres.map((n) => `<option value="${escapeAttr(n)}" ${n === p.repartidor ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+  return `<select class="inline r-rep" ${p.anulado ? "disabled" : ""}>${opts}</select>`;
+}
+
 function renderTabla() {
   const tb = $("tabla-body");
   tb.innerHTML = "";
@@ -381,7 +430,7 @@ function renderTabla() {
       <td>${items}</td>
       <td class="right nowrap">${money(p.total)}</td>
       <td class="nowrap">${p.metodo_pago}${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
-      <td><input class="inline r-rep" value="${escapeAttr(p.repartidor)}" ${p.anulado ? "disabled" : ""} /></td>
+      <td>${repartidorSelectHtml(p)}</td>
       <td><input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} /></td>
       <td class="right"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /></td>
       <td><input class="inline r-not" value="${escapeAttr(p.notas)}" ${p.anulado ? "disabled" : ""} /></td>
@@ -431,7 +480,7 @@ function editarPedido(p) {
   $("f-indicaciones").value = p.indicaciones;
   $("f-pago").value = p.metodo_pago;
   $("f-vuelto").value = p.pago_efectivo_detalle;
-  $("f-repartidor").value = p.repartidor;
+  fillRepartidorSelect($("f-repartidor"), p.repartidor);
   $("f-envio").value = p.costo_envio;
   $("f-no-envio").checked = p.no_cobrar_envio;
   $("f-desc-tipo").value = p.descuento_tipo || "";
@@ -595,6 +644,11 @@ function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
   resetForm();
   await loadDay();
   await loadPendientes();
+  // Al iniciar el día: si es hoy y todavía no se cargaron los repartidores,
+  // preguntarlos apenas abre la app.
+  if (state.fecha === todayISO() && state.repartidoresDia.length === 0) {
+    openRepModal();
+  }
   // Auto-refresco de alertas cada minuto (recalcula demoras/sin facturar).
   setInterval(loadDay, 60000);
 })();

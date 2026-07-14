@@ -108,3 +108,13 @@ class Config(Base):
 
     clave: Mapped[str] = mapped_column(String, primary_key=True)
     valor: Mapped[str] = mapped_column(String)
+
+
+class RepartidorDia(Base):
+    """Repartidores asignados a una fecha (1 o 2 por día, varían)."""
+
+    __tablename__ = "repartidores_dia"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[date] = mapped_column(Date, index=True)
+    nombre: Mapped[str] = mapped_column(String)

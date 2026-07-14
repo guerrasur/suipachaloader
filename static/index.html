@@ -26,6 +26,7 @@
         <div class="row" style="justify-content: space-between;">
           <h2 id="form-title">Nuevo pedido</h2>
           <div class="daynav">
+            <button class="btn secondary sm" id="btn-repartidores">🛵 <span id="rep-dia-label">Repartidores</span></button>
             <button class="btn ghost sm" id="day-prev">◀</button>
             <span class="today" id="day-label"></span>
             <button class="btn ghost sm" id="day-next">▶</button>
@@ -80,10 +81,9 @@
               <label>Paga con (vuelto)</label>
               <input id="f-vuelto" placeholder="Justo o monto" />
             </div>
-            <div class="field autocomplete" id="wrap-repartidor">
+            <div class="field" id="wrap-repartidor">
               <label>Repartidor</label>
-              <input id="f-repartidor" autocomplete="off" placeholder="Nombre" />
-              <div class="ac-list hidden" id="ac-repartidor"></div>
+              <select id="f-repartidor"></select>
             </div>
           </div>
 
@@ -240,6 +240,28 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal repartidores del día -->
+  <div class="modal-back" id="modal-rep">
+    <div class="modal">
+      <h2>Repartidores del día</h2>
+      <p class="muted" id="rep-modal-fecha" style="margin-top:0;"></p>
+      <p class="muted" style="font-size:.85rem;">Cargá 1 o 2 repartidores para este día. Después, en cada pedido, elegís cuál lo lleva (o lo dejás sin asignar y lo decidís más tarde).</p>
+      <datalist id="rep-historial"></datalist>
+      <div class="field" style="margin-bottom:.6rem;">
+        <label>Repartidor 1</label>
+        <input id="rep-1" list="rep-historial" placeholder="Nombre" autocomplete="off" />
+      </div>
+      <div class="field" style="margin-bottom:1rem;">
+        <label>Repartidor 2 (opcional)</label>
+        <input id="rep-2" list="rep-historial" placeholder="Nombre" autocomplete="off" />
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn ghost" id="rep-cancel">Cancelar</button>
+        <button class="btn" id="rep-save">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal genérico plato -->
   <div class="modal-back" id="modal-plato">

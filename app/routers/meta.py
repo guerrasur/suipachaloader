@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from .. import config as cfg
 from ..database import get_db
 from ..excel_export import exportar_mes, nombre_archivo
-from ..models import Pedido
-from ..schemas import ConfigIn
+from ..models import Pedido, RepartidorDia
+from ..schemas import ConfigIn, RepartidoresDiaIn
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -73,6 +73,33 @@ def pendientes(db: Session = Depends(get_db)):
         "fechas_anteriores": sorted({p.fecha.isoformat() for p in anteriores}),
         "pedidos_futuros": manana,
     }
+
+
+# --- Repartidores del día ---------------------------------------------------
+@router.get("/repartidores-dia")
+def get_repartidores_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+    fecha = fecha or date.today()
+    filas = (
+        db.query(RepartidorDia)
+        .filter(RepartidorDia.fecha == fecha)
+        .order_by(RepartidorDia.id)
+        .all()
+    )
+    return {"fecha": fecha.isoformat(), "nombres": [f.nombre for f in filas]}
+
+
+@router.put("/repartidores-dia")
+def set_repartidores_dia(
+    data: RepartidoresDiaIn, fecha: date | None = None, db: Session = Depends(get_db)
+):
+    """Fija (reemplaza) los repartidores de la fecha. 1 o 2 nombres."""
+    fecha = fecha or date.today()
+    db.query(RepartidorDia).filter(RepartidorDia.fecha == fecha).delete()
+    nombres = [n.strip() for n in data.nombres if n and n.strip()][:2]
+    for nombre in nombres:
+        db.add(RepartidorDia(fecha=fecha, nombre=nombre))
+    db.commit()
+    return {"fecha": fecha.isoformat(), "nombres": nombres}
 
 
 # --- Exportación ------------------------------------------------------------
