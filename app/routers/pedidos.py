@@ -124,6 +124,29 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     return pedido
 
 
+@router.post("/facturar-dia")
+def facturar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+    """Marca como facturados todos los pedidos válidos (no anulados) de la
+    fecha que todavía no lo estén. Sirve para el cierre del día al pasar la
+    lista completa a facturación de una sola vez."""
+    fecha = fecha or date.today()
+    pendientes = (
+        db.query(Pedido)
+        .filter(
+            Pedido.fecha == fecha,
+            Pedido.anulado.is_(False),
+            Pedido.facturado.is_(False),
+        )
+        .all()
+    )
+    ahora = datetime.now()
+    for p in pendientes:
+        p.facturado = True
+        p.hora_facturado = ahora
+    db.commit()
+    return {"fecha": fecha.isoformat(), "facturados": len(pendientes)}
+
+
 @router.post("/{pedido_id}/anular", response_model=PedidoOut)
 def anular(pedido_id: int, db: Session = Depends(get_db)):
     """Anula (no borra): queda visible pero no suma ni alerta."""
