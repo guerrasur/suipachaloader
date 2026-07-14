@@ -27,6 +27,7 @@
           <h2 id="form-title">Nuevo pedido</h2>
           <div class="daynav">
             <button class="btn secondary sm" id="btn-repartidores">🛵 <span id="rep-dia-label">Repartidores</span></button>
+            <button class="btn secondary sm" id="btn-plato-dia">🍽 <span id="pdd-dia-label">Plato del día</span></button>
             <button class="btn ghost sm" id="day-prev">◀</button>
             <span class="today" id="day-label"></span>
             <button class="btn ghost sm" id="day-next">▶</button>
@@ -259,6 +260,41 @@
       <div class="row" style="justify-content:flex-end;">
         <button class="btn ghost" id="rep-cancel">Cancelar</button>
         <button class="btn" id="rep-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal plato del día -->
+  <div class="modal-back" id="modal-pdd">
+    <div class="modal">
+      <h2>Plato del día</h2>
+      <p class="muted" id="pdd-modal-fecha" style="margin-top:0;"></p>
+      <label style="display:block;margin-bottom:.8rem;font-weight:500;">
+        <input type="checkbox" id="pdd-hay" checked /> Hoy hay plato del día
+      </label>
+      <div id="pdd-campos">
+        <div class="field" style="margin-bottom:.6rem;">
+          <label>Nombre del plato del día</label>
+          <input id="pdd-nombre" placeholder="Ej: Milanesa con puré" autocomplete="off" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Precio efectivo</label>
+            <input type="number" id="pdd-ef" step="100" />
+          </div>
+          <div class="field">
+            <label>Precio lista</label>
+            <input type="number" id="pdd-li" step="100" />
+          </div>
+          <div class="field" style="justify-content:flex-end;">
+            <button type="button" class="btn ghost sm" id="pdd-igualar">= que los demás platos</button>
+          </div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:.82rem;margin-top:.6rem;">Después, en cada pedido, agregás el plato del día con el botón "+ Plato del día" (podés editar nombre y precio en el momento).</p>
+      <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+        <button class="btn ghost" id="pdd-cancel">Cancelar</button>
+        <button class="btn" id="pdd-save">Guardar</button>
       </div>
     </div>
   </div>

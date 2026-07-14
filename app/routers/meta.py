@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from .. import config as cfg
 from ..database import get_db
 from ..excel_export import exportar_mes, nombre_archivo
-from ..models import Pedido, RepartidorDia
-from ..schemas import ConfigIn, RepartidoresDiaIn
+from ..models import Pedido, PlatoDia, RepartidorDia
+from ..schemas import ConfigIn, PlatoDiaIn, RepartidoresDiaIn
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -100,6 +100,46 @@ def set_repartidores_dia(
         db.add(RepartidorDia(fecha=fecha, nombre=nombre))
     db.commit()
     return {"fecha": fecha.isoformat(), "nombres": nombres}
+
+
+# --- Plato del día ----------------------------------------------------------
+@router.get("/plato-del-dia")
+def get_plato_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+    fecha = fecha or date.today()
+    row = db.get(PlatoDia, fecha)
+    return {
+        "fecha": fecha.isoformat(),
+        "definido": row is not None,  # si ya se respondió para ese día
+        "hay": bool(row.hay) if row else False,
+        "nombre": row.nombre if row else "",
+        "precio_efectivo": row.precio_efectivo if row else 0.0,
+        "precio_lista": row.precio_lista if row else 0.0,
+    }
+
+
+@router.put("/plato-del-dia")
+def set_plato_dia(
+    data: PlatoDiaIn, fecha: date | None = None, db: Session = Depends(get_db)
+):
+    """Define el plato del día de la fecha (o marca que ese día no hay)."""
+    fecha = fecha or date.today()
+    row = db.get(PlatoDia, fecha)
+    if row is None:
+        row = PlatoDia(fecha=fecha)
+        db.add(row)
+    row.hay = data.hay
+    row.nombre = data.nombre.strip()
+    row.precio_efectivo = max(0.0, data.precio_efectivo)
+    row.precio_lista = max(0.0, data.precio_lista)
+    db.commit()
+    return {
+        "fecha": fecha.isoformat(),
+        "definido": True,
+        "hay": row.hay,
+        "nombre": row.nombre,
+        "precio_efectivo": row.precio_efectivo,
+        "precio_lista": row.precio_lista,
+    }
 
 
 # --- Exportación ------------------------------------------------------------
