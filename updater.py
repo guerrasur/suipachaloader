@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Actualizador automático de SuipachaLoader.
+"""Actualizador automático de Suipacha Loader.
 
-Lo ejecuta SuipachaLoader.bat antes de arrancar la app:
+Lo ejecuta iniciar_app.bat antes de arrancar la app:
 
 1. Compara la versión local (archivo VERSION) con la del repositorio en GitHub.
 2. Si hay una versión nueva, descarga el ZIP de la rama ``main`` y reemplaza
@@ -86,10 +86,10 @@ def _aplicar_zip(zip_path: Path) -> None:
             rel = origen.relative_to(raiz)
             if rel.parts[0] in NO_TOCAR:
                 continue
-            if rel.name == "SuipachaLoader.bat":
+            if rel.name == "iniciar_app.bat":
                 # El .bat puede estar en ejecución: se deja como .new y el
                 # propio launcher lo aplica en el próximo arranque.
-                destino = BASE / "SuipachaLoader.bat.new"
+                destino = BASE / "iniciar_app.bat.new"
             else:
                 destino = BASE / rel
             destino.parent.mkdir(parents=True, exist_ok=True)

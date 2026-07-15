@@ -3,38 +3,36 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 REM ---------------------------------------------------------------------------
-REM  SuipachaLoader - Gestor de Pedidos
-REM  Doble clic en este archivo para arrancar la app.
+REM  Suipacha Loader - Gestor de Pedidos (motor de arranque)
+REM  No usar este archivo directamente: abrí el acceso directo "Suipacha
+REM  Loader" que este mismo script crea en esta carpeta y en tu Escritorio
+REM  (con el icono). Asi el icono siempre queda visible al abrir la app.
+REM
 REM  Antes de arrancar busca actualizaciones en GitHub y se actualiza solo.
 REM  Los datos (pedidos, clientes, backups, Excel) se guardan en
 REM  %LOCALAPPDATA%\SuipachaLoader, asi que ninguna actualizacion los borra.
 REM ---------------------------------------------------------------------------
 
 REM Si una actualizacion anterior dejo un launcher nuevo, aplicarlo y relanzar.
-if exist "%~dp0SuipachaLoader.bat.new" (
-  move /y "%~dp0SuipachaLoader.bat.new" "%~f0" >nul & call "%~f0" & exit /b
+if exist "%~dp0iniciar_app.bat.new" (
+  move /y "%~dp0iniciar_app.bat.new" "%~f0" >nul & call "%~f0" & exit /b
 )
 
 set "VER="
 if exist VERSION set /p VER=<VERSION
-title SuipachaLoader v%VER%
+title Suipacha Loader v%VER%
 
-REM Crear (o actualizar) un acceso directo con el icono de SuipachaLoader en
-REM el Escritorio. Un .bat no puede tener icono propio (corre dentro de
-REM cmd.exe); este acceso directo es la forma de tener el icono en Windows.
-REM Doble clic en el acceso directo del Escritorio a partir de ahora.
+REM Crear (o actualizar) el acceso directo "Suipacha Loader" con icono, en
+REM esta misma carpeta y en el Escritorio. Un .bat no puede tener icono
+REM propio (corre dentro de cmd.exe), por eso el acceso directo. Se usa
+REM PowerShell (mas confiable que cscript/VBS, que algunos antivirus
+REM bloquean) y no se escribe ningun archivo temporal.
 if not exist "%~dp0static\icon.ico" goto :sin_icono
-set "VBS=%TEMP%\suipacha_shortcut.vbs"
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS%"
-echo sLinkFile = oWS.SpecialFolders("Desktop") ^& "\SuipachaLoader.lnk" >> "%VBS%"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS%"
-echo oLink.TargetPath = "%~f0" >> "%VBS%"
-echo oLink.WorkingDirectory = "%~dp0" >> "%VBS%"
-echo oLink.IconLocation = "%~dp0static\icon.ico" >> "%VBS%"
-echo oLink.Description = "SuipachaLoader - Gestor de Pedidos" >> "%VBS%"
-echo oLink.Save >> "%VBS%"
-cscript //nologo "%VBS%" >nul 2>nul
-del "%VBS%" >nul 2>nul
+set "TARGET=%~f0"
+set "APPDIR=%~dp0"
+set "ICON=%~dp0static\icon.ico"
+set "LOCALLNK=%~dp0Suipacha Loader.lnk"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $targets=@('%LOCALLNK%'); try { $targets += (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Suipacha Loader.lnk') } catch {}; foreach($p in $targets){ try { $s=$ws.CreateShortcut($p); $s.TargetPath='%TARGET%'; $s.WorkingDirectory='%APPDIR%'; $s.IconLocation='%ICON%'; $s.Description='Suipacha Loader - Gestor de Pedidos'; $s.Save() } catch {} }" >nul 2>nul
 :sin_icono
 
 REM Detectar el comando de Python disponible (python o el lanzador py).
@@ -72,10 +70,10 @@ echo Buscando actualizaciones...
 REM Releer la version por si la actualizacion la cambio.
 set "VER="
 if exist VERSION set /p VER=<VERSION
-title SuipachaLoader v%VER%
+title Suipacha Loader v%VER%
 
 echo.
-echo Iniciando SuipachaLoader v%VER%... el navegador se abrira solo.
+echo Iniciando Suipacha Loader v%VER%... el navegador se abrira solo.
 echo Para cerrar la app, cerra esta ventana.
 echo.
 %PY% run.py

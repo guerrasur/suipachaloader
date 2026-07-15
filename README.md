@@ -13,20 +13,24 @@ hoja por día.
 
 ### Windows (recomendado en el mostrador)
 
-Hacé **doble clic en `SuipachaLoader.bat`** (en la raíz del proyecto). Ese archivo:
+**La primera vez**, hacé doble clic en `iniciar_app.bat` (en la raíz del
+proyecto). Ese archivo:
 
 - Detecta Python (`python` o el lanzador `py`).
-- La **primera vez** instala solo las dependencias (`requirements.txt`).
+- Instala las dependencias (`requirements.txt`).
 - **Busca actualizaciones en GitHub** (`updater.py`) y se actualiza solo si hay
   una versión nueva (los datos nunca se tocan). Si el repo es privado, guardá
   un token de GitHub con permiso de lectura en
   `%LOCALAPPDATA%\SuipachaLoader\github_token.txt`.
-- Crea (o actualiza) un **acceso directo con el ícono de SuipachaLoader** en el
-  Escritorio (`SuipachaLoader.lnk`). Un `.bat` no puede tener ícono propio, así
-  que después de la primera vez conviene usar ese acceso directo en vez del
-  `.bat` para tener el ícono en la barra de tareas y el Escritorio.
+- Crea el acceso directo **"Suipacha Loader"** con el ícono de la app, tanto en
+  esta misma carpeta como en el Escritorio (un `.bat` no puede tener ícono
+  propio, por eso el acceso directo).
 - Levanta el servidor y **abre el navegador automáticamente** en
   `http://127.0.0.1:8000/`.
+
+**De ahí en adelante**, abrí la app desde el acceso directo **"Suipacha
+Loader"** que quedó en tu Escritorio (con el ícono) — no hace falta volver a
+tocar `iniciar_app.bat` directamente.
 
 Para cerrar la app, cerrá la ventana negra que queda abierta.
 
@@ -79,7 +83,7 @@ automáticamente. Al arrancar:
 ## Estructura
 
 ```
-SuipachaLoader.bat     # arranque en Windows (doble clic) + auto-actualización
+iniciar_app.bat        # motor de arranque (crea el acceso directo con ícono)
 updater.py             # actualizador automático desde GitHub
 VERSION                # número de versión de la app
 run.py                 # arranque en un comando (server + navegador)
