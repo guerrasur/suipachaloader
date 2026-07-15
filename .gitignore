@@ -10,8 +10,9 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Actualizador (launcher nuevo pendiente de aplicar)
+# Actualizador (launcher nuevo pendiente de aplicar) y acceso directo generado
 *.bat.new
+*.lnk
 
 # Sistema
 .DS_Store
