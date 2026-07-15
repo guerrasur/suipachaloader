@@ -384,6 +384,76 @@ async function openRepModal() {
   $("modal-rep").classList.add("show");
 }
 
+// ---------------------------------------------------------- rutas optimizadas
+$("btn-rutas").addEventListener("click", openRutasModal);
+$("rutas-cerrar").addEventListener("click", () => $("modal-rutas").classList.remove("show"));
+
+async function openRutasModal() {
+  $("rutas-fecha").textContent = state.fecha === todayISO()
+    ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
+  $("rutas-contenido").innerHTML = `<p class="muted">Calculando…</p>`;
+  $("modal-rutas").classList.add("show");
+  try {
+    const r = await api("/api/rutas?fecha=" + state.fecha);
+    renderRutas(r);
+  } catch (e) {
+    $("rutas-contenido").innerHTML = `<p class="banner warn">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderRutas(r) {
+  const cont = $("rutas-contenido");
+  if (!r.grupos.length && !r.sin_geocodificar.length) {
+    cont.innerHTML = `<p class="muted">No hay envíos pendientes de salir para este día.</p>`;
+    return;
+  }
+  let html = "";
+  r.grupos.forEach((g, gi) => {
+    const paradas = g.pedidos.map((p, i) =>
+      `<li>${i + 1}. ${escapeHtml(p.cliente_nombre || "(sin nombre)")} — ${escapeHtml(p.cliente_direccion)}${p.numero != null ? ` (N° ${p.numero})` : ""}</li>`
+    ).join("");
+    html += `
+      <div class="card" style="margin-top:.8rem;">
+        <h3 style="margin:0 0 .4rem;">🛵 ${escapeHtml(g.repartidor || "(sin asignar)")} — ${g.pedidos.length} parada${g.pedidos.length === 1 ? "" : "s"}</h3>
+        <ol style="margin:.2rem 0 .8rem 1.2rem;padding:0;">${paradas}</ol>
+        <div class="row" style="flex-wrap:wrap;">
+          <a class="btn secondary sm" href="${g.maps_link}" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
+          <button type="button" class="btn sm rutas-asignar" data-gi="${gi}">✅ Asignar estos pedidos a ${escapeHtml(g.repartidor)}</button>
+        </div>
+      </div>`;
+  });
+  if (r.sin_geocodificar.length) {
+    const items = r.sin_geocodificar.map((p) =>
+      `<li>${escapeHtml(p.cliente_nombre || "(sin nombre)")} — ${escapeHtml(p.cliente_direccion)}${p.numero != null ? ` (N° ${p.numero})` : ""}</li>`
+    ).join("");
+    html += `
+      <div class="card" style="margin-top:.8rem;">
+        <h3 style="margin:0 0 .4rem;">⚠ No se pudieron ubicar en el mapa</h3>
+        <p class="muted" style="font-size:.85rem;">Revisá estas direcciones y asignalas a mano en la tabla.</p>
+        <ul style="margin:.2rem 0 0 1.2rem;padding:0;">${items}</ul>
+      </div>`;
+  }
+  cont.innerHTML = html;
+  cont.querySelectorAll(".rutas-asignar").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const g = r.grupos[+btn.dataset.gi];
+      btn.disabled = true;
+      btn.textContent = "Asignando…";
+      try {
+        for (const p of g.pedidos) {
+          await api(`/api/pedidos/${p.id}`, { method: "PATCH", body: JSON.stringify({ repartidor: g.repartidor }) });
+        }
+        btn.textContent = "✅ Asignado";
+        await loadDay();
+      } catch (e) {
+        alert("Error: " + e.message);
+        btn.disabled = false;
+        btn.textContent = `✅ Asignar estos pedidos a ${g.repartidor}`;
+      }
+    })
+  );
+}
+
 // -------------------------------------------------------- plato del día (día)
 async function loadPlatoDia() {
   const d = await api("/api/plato-del-dia?fecha=" + state.fecha);
@@ -723,6 +793,10 @@ function drawTicket(p) {
   }
 }
 
+function googleMapsSearchLink(direccion) {
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(direccion || "");
+}
+
 function openTicket(p) {
   _ticketPedido = p;
   $("ticket-title").textContent = `Ticket pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}`;
@@ -731,6 +805,9 @@ function openTicket(p) {
   $("ticket-contacto").style.display = conTel ? "" : "none";
   $("ticket-wa").style.display = conTel ? "" : "none";
   if (conTel) $("ticket-wa").href = "https://wa.me/" + telefonoWa(p.cliente_telefono);
+  const conDireccion = !!(p.cliente_direccion || "").trim();
+  $("ticket-maps").style.display = conDireccion ? "" : "none";
+  if (conDireccion) $("ticket-maps").href = googleMapsSearchLink(p.cliente_direccion);
   $("ticket-copiar").textContent = "📋 Copiar imagen";
   $("ticket-contacto").textContent = "👤 Copiar contacto";
   $("modal-ticket").classList.add("show");
@@ -962,6 +1039,8 @@ async function loadConfig() {
   $("c-sinfact").value = _cfgCache.hora_alerta_sin_facturar;
   $("c-limite").value = _cfgCache.hora_limite_pedidos;
   $("c-envio").value = _cfgCache.costo_envio_default;
+  $("c-direccion-local").value = _cfgCache.direccion_local || "";
+  $("c-ciudad-default").value = _cfgCache.ciudad_default || "";
 }
 $("btn-guardar-config").addEventListener("click", async () => {
   const body = {
@@ -969,6 +1048,8 @@ $("btn-guardar-config").addEventListener("click", async () => {
     hora_alerta_sin_facturar: $("c-sinfact").value.trim(),
     hora_limite_pedidos: $("c-limite").value.trim(),
     costo_envio_default: +$("c-envio").value,
+    direccion_local: $("c-direccion-local").value.trim(),
+    ciudad_default: $("c-ciudad-default").value.trim(),
   };
   _cfgCache = await api("/api/config", { method: "PUT", body: JSON.stringify(body) });
   $("config-ok").textContent = "✓ Guardado";

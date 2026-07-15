@@ -15,6 +15,11 @@ DEFAULTS: dict[str, str] = {
     "hora_limite_pedidos": "13:40",
     # Costo de envío por defecto para pedidos tipo Envío.
     "costo_envio_default": "3000",
+    # Dirección del local (punto de partida de las rutas de envío).
+    "direccion_local": "",
+    # Ciudad/zona que se agrega a las direcciones al geocodificar si no la
+    # incluyen ya (ej. "Suipacha, Buenos Aires, Argentina").
+    "ciudad_default": "",
 }
 
 

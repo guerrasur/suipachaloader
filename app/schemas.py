@@ -188,3 +188,5 @@ class ConfigIn(BaseModel):
     hora_alerta_sin_facturar: str | None = None
     hora_limite_pedidos: str | None = None
     costo_envio_default: float | None = None
+    direccion_local: str | None = None
+    ciudad_default: str | None = None

@@ -129,6 +129,21 @@ class RepartidorDia(Base):
     nombre: Mapped[str] = mapped_column(String)
 
 
+class GeocodeCache(Base):
+    """Caché de geocoding por dirección (evita re-consultar Nominatim).
+
+    lat/lon en NULL significa que se intentó geocodificar y no se encontró
+    resultado (así no se reintenta sin parar una dirección inválida).
+    """
+
+    __tablename__ = "geocode_cache"
+
+    direccion: Mapped[str] = mapped_column(String, primary_key=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actualizado: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class PlatoDia(Base):
     """Plato del día para una fecha (o marca de que ese día no hay).
 
