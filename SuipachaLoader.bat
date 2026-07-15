@@ -19,6 +19,24 @@ set "VER="
 if exist VERSION set /p VER=<VERSION
 title SuipachaLoader v%VER%
 
+REM Crear (o actualizar) un acceso directo con el icono de SuipachaLoader en
+REM el Escritorio. Un .bat no puede tener icono propio (corre dentro de
+REM cmd.exe); este acceso directo es la forma de tener el icono en Windows.
+REM Doble clic en el acceso directo del Escritorio a partir de ahora.
+if not exist "%~dp0static\icon.ico" goto :sin_icono
+set "VBS=%TEMP%\suipacha_shortcut.vbs"
+echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS%"
+echo sLinkFile = oWS.SpecialFolders("Desktop") ^& "\SuipachaLoader.lnk" >> "%VBS%"
+echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS%"
+echo oLink.TargetPath = "%~f0" >> "%VBS%"
+echo oLink.WorkingDirectory = "%~dp0" >> "%VBS%"
+echo oLink.IconLocation = "%~dp0static\icon.ico" >> "%VBS%"
+echo oLink.Description = "SuipachaLoader - Gestor de Pedidos" >> "%VBS%"
+echo oLink.Save >> "%VBS%"
+cscript //nologo "%VBS%" >nul 2>nul
+del "%VBS%" >nul 2>nul
+:sin_icono
+
 REM Detectar el comando de Python disponible (python o el lanzador py).
 set "PY=python"
 where python >nul 2>nul || set "PY=py"

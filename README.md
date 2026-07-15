@@ -21,6 +21,10 @@ Hacé **doble clic en `SuipachaLoader.bat`** (en la raíz del proyecto). Ese arc
   una versión nueva (los datos nunca se tocan). Si el repo es privado, guardá
   un token de GitHub con permiso de lectura en
   `%LOCALAPPDATA%\SuipachaLoader\github_token.txt`.
+- Crea (o actualiza) un **acceso directo con el ícono de SuipachaLoader** en el
+  Escritorio (`SuipachaLoader.lnk`). Un `.bat` no puede tener ícono propio, así
+  que después de la primera vez conviene usar ese acceso directo en vez del
+  `.bat` para tener el ícono en la barra de tareas y el Escritorio.
 - Levanta el servidor y **abre el navegador automáticamente** en
   `http://127.0.0.1:8000/`.
 
