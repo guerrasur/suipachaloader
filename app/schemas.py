@@ -139,6 +139,7 @@ class PedidoPatch(BaseModel):
     repartidor: str | None = None
     hora_salida: datetime | None = None
     facturado: bool | None = None
+    pagado: bool | None = None
     notas: str | None = None
     fecha: date | None = None
 
@@ -166,6 +167,7 @@ class PedidoOut(BaseModel):
     hora_salida: datetime | None
     facturado: bool
     hora_facturado: datetime | None
+    pagado: bool
     anulado: bool
     notas: str
 

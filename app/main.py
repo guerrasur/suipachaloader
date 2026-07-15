@@ -16,7 +16,7 @@ from .seed import seed_platos
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Suipacha — Gestor de Pedidos")
+app = FastAPI(title="Suipacha Loader — Gestor de Pedidos")
 
 # Columnas agregadas después de la creación original de la BD. create_all no
 # altera tablas existentes, así que se agregan acá si faltan (idempotente).
@@ -24,6 +24,7 @@ _COLUMNAS_NUEVAS = [
     ("clientes", "telefono", "VARCHAR NOT NULL DEFAULT ''"),
     ("pedidos", "numero", "INTEGER"),
     ("pedidos", "cliente_telefono", "VARCHAR NOT NULL DEFAULT ''"),
+    ("pedidos", "pagado", "BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

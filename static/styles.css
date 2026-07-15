@@ -161,6 +161,8 @@ tbody tr:hover { background: var(--brand-soft); }
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
 tr.anulado td { color: #9aa2ab; text-decoration: line-through; }
 tr.anulado:hover { background: #f3f4f7; }
+tr.salio { background: var(--ok-bg) !important; }
+tr.salio:hover { background: #d9efe1 !important; }
 tr.demorado { background: var(--demora-bg) !important; }
 tr.demorado:hover { background: #fbd5d1 !important; }
 tr.sinfact { box-shadow: inset 4px 0 0 var(--warn); }
@@ -189,6 +191,13 @@ td .inline:focus { border-color: var(--brand); background: #fff; outline: none; 
 .pago-pill.pago-qr { background: #7a4fd0; }
 .pago-pill.pago-posnet { background: #b26a00; }
 .pago-pill.pago-otro { background: #6b7684; }
+
+/* Botón de pago recibido (comprobante de transferencia / efectivo cobrado). */
+.r-pagado { margin-top: .25rem; }
+.r-pagado.pagado-si { background: var(--ok); color: #fff; }
+.r-pagado.pagado-si:hover { background: #17703d; }
+.r-pagado.pagado-no { background: var(--warn-bg); color: var(--warn); border: 1px solid #f0d59a; }
+.r-pagado.pagado-no:hover { background: #ffe9c2; }
 
 /* -------------------------------------------------------------- resumen */
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: .7rem; }

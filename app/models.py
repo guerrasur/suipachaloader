@@ -82,6 +82,10 @@ class Pedido(Base):
     facturado: Mapped[bool] = mapped_column(Boolean, default=False)
     hora_facturado: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Pago recibido (sirve para saber si falta el comprobante de una
+    # transferencia o cobrar un efectivo al volver el repartidor).
+    pagado: Mapped[bool] = mapped_column(Boolean, default=False)
+
     anulado: Mapped[bool] = mapped_column(Boolean, default=False)
     notas: Mapped[str] = mapped_column(Text, default="")
 
