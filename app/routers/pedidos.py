@@ -184,6 +184,19 @@ def restaurar(pedido_id: int, db: Session = Depends(get_db)):
     return pedido
 
 
+@router.delete("/{pedido_id}", status_code=204)
+def borrar(pedido_id: int, db: Session = Depends(get_db)):
+    """Borra definitivamente un pedido. Sólo permitido si ya está anulado,
+    para no perder por error un pedido activo (anular es reversible, esto no)."""
+    pedido = db.get(Pedido, pedido_id)
+    if not pedido:
+        raise HTTPException(404, "Pedido no encontrado")
+    if not pedido.anulado:
+        raise HTTPException(400, "Sólo se pueden borrar definitivamente pedidos anulados.")
+    db.delete(pedido)
+    db.commit()
+
+
 @router.get("/repartidores")
 def repartidores(db: Session = Depends(get_db)):
     """Nombres de repartidores usados antes (autocompletado, lista abierta)."""

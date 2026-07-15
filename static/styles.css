@@ -159,8 +159,9 @@ tbody tr { transition: background .1s ease; }
 tbody tr:nth-child(even) { background: #fafbfd; }
 tbody tr:hover { background: var(--brand-soft); }
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
+tr.anulado { background: var(--danger-bg) !important; }
 tr.anulado td { color: #9aa2ab; text-decoration: line-through; }
-tr.anulado:hover { background: #f3f4f7; }
+tr.anulado:hover { background: #fbdedb !important; }
 tr.salio { background: #a7e3ba !important; }
 tr.salio:hover { background: #93d8a8 !important; }
 tr.demorado { background: var(--demora-bg) !important; }
