@@ -70,13 +70,27 @@ def listar(fecha: date | None = None, db: Session = Depends(get_db)):
     return [_serializar(db, p) for p in pedidos]
 
 
+def _proximo_numero(db: Session, fecha: date) -> int:
+    """Número visible de dos dígitos (10-99), reinicia por día.
+
+    Paso 37 (coprimo con 90): los números consecutivos quedan bien separados
+    (10, 47, 84, 31, ...) para no confundirlos, y no se repiten en 90 pedidos.
+    Cuenta también anulados para nunca reutilizar un número del día.
+    """
+    n = db.query(Pedido).filter(Pedido.fecha == fecha).count()
+    return 10 + (n * 37) % 90
+
+
 @router.post("", response_model=PedidoOut)
 def crear(data: PedidoIn, db: Session = Depends(get_db)):
+    fecha = data.fecha or date.today()
     pedido = Pedido(
-        fecha=data.fecha or date.today(),
+        fecha=fecha,
+        numero=_proximo_numero(db, fecha),
         tipo=data.tipo,
         cliente_nombre=data.cliente_nombre,
         cliente_direccion=data.cliente_direccion,
+        cliente_telefono=data.cliente_telefono,
         indicaciones=data.indicaciones,
         costo_envio=data.costo_envio,
         no_cobrar_envio=data.no_cobrar_envio,
@@ -122,6 +136,29 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(pedido)
     return pedido
+
+
+@router.post("/facturar-dia")
+def facturar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+    """Marca como facturados todos los pedidos válidos (no anulados) de la
+    fecha que todavía no lo estén. Sirve para el cierre del día al pasar la
+    lista completa a facturación de una sola vez."""
+    fecha = fecha or date.today()
+    pendientes = (
+        db.query(Pedido)
+        .filter(
+            Pedido.fecha == fecha,
+            Pedido.anulado.is_(False),
+            Pedido.facturado.is_(False),
+        )
+        .all()
+    )
+    ahora = datetime.now()
+    for p in pendientes:
+        p.facturado = True
+        p.hora_facturado = ahora
+    db.commit()
+    return {"fecha": fecha.isoformat(), "facturados": len(pendientes)}
 
 
 @router.post("/{pedido_id}/anular", response_model=PedidoOut)

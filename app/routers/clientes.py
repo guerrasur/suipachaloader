@@ -17,7 +17,13 @@ def listar(q: str = "", db: Session = Depends(get_db)):
     query = db.query(Cliente)
     if q:
         like = f"%{q}%"
-        query = query.filter(or_(Cliente.nombre.ilike(like), Cliente.direccion.ilike(like)))
+        query = query.filter(
+            or_(
+                Cliente.nombre.ilike(like),
+                Cliente.direccion.ilike(like),
+                Cliente.telefono.ilike(like),
+            )
+        )
     # Nunca asumir que un nombre es único: se ordena por nombre + dirección.
     return query.order_by(Cliente.nombre, Cliente.direccion).limit(20).all()
 

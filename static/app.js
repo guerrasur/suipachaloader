@@ -246,6 +246,7 @@ $("pedido-form").addEventListener("submit", async (e) => {
     tipo: $("f-tipo").value,
     cliente_nombre: $("f-cliente").value.trim(),
     cliente_direccion: $("f-direccion").value.trim(),
+    cliente_telefono: $("f-telefono").value.trim(),
     indicaciones: $("f-indicaciones").value.trim(),
     items: state.items.map((i) => ({
       plato_id: i.es_pdd ? null : i.plato_id,
@@ -286,9 +287,16 @@ async function saveClienteQuiet(body) {
         method: "POST",
         body: JSON.stringify({
           nombre: body.cliente_nombre, direccion: body.cliente_direccion,
+          telefono: body.cliente_telefono || "",
           indicaciones: body.indicaciones,
           descuento_tipo: body.descuento_tipo, descuento_valor: body.descuento_valor,
         }),
+      });
+    } else if (body.cliente_telefono && !dup.telefono) {
+      // Cliente ya guardado sin teléfono: completarlo para la próxima.
+      await api(`/api/clientes/${dup.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...dup, telefono: body.cliente_telefono }),
       });
     }
   } catch (e) { /* no bloquear la carga por esto */ }
@@ -314,6 +322,7 @@ setupAutocomplete("f-cliente", "ac-cliente", async (q) => {
     onPick: () => {
       $("f-cliente").value = c.nombre;
       $("f-direccion").value = c.direccion || "";
+      $("f-telefono").value = c.telefono || "";
       $("f-indicaciones").value = c.indicaciones || "";
       if (c.descuento_tipo) {
         $("f-desc-tipo").value = c.descuento_tipo;
@@ -530,18 +539,20 @@ function renderTabla() {
     const hs = hhmm(p.hora_salida);
     const hp = hhmm(p.hora_pedido);
     tr.innerHTML = `
+      <td class="num-pedido">${p.numero ?? "—"}</td>
       <td class="nowrap">${hp} ${badges}</td>
       <td>${p.tipo}</td>
       <td>${escapeHtml(p.cliente_nombre)}</td>
       <td>${escapeHtml(p.cliente_direccion)}</td>
       <td>${items}</td>
       <td class="right nowrap">${money(p.total)}</td>
-      <td class="nowrap">${p.metodo_pago}${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
+      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
       <td>${repartidorSelectHtml(p)}</td>
       <td><input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} /></td>
       <td class="right"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /></td>
       <td><input class="inline r-not" value="${escapeAttr(p.notas)}" ${p.anulado ? "disabled" : ""} /></td>
       <td class="nowrap">
+        ${p.anulado ? "" : `<button class="btn ghost sm r-ticket" title="Ticket para el repartidor">🖼</button>`}
         <button class="btn ghost sm r-edit">✎</button>
         ${p.anulado
           ? `<button class="btn secondary sm r-rest">Restaurar</button>`
@@ -554,6 +565,7 @@ function renderTabla() {
       patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null }));
     tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
     tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
+    tr.querySelector(".r-ticket")?.addEventListener("click", () => openTicket(p));
     tr.querySelector(".r-edit").addEventListener("click", () => editarPedido(p));
     tr.querySelector(".r-anular")?.addEventListener("click", () => anular(p.id));
     tr.querySelector(".r-rest")?.addEventListener("click", () => restaurar(p.id));
@@ -584,6 +596,7 @@ function editarPedido(p) {
   $("f-tipo").value = p.tipo;
   $("f-cliente").value = p.cliente_nombre;
   $("f-direccion").value = p.cliente_direccion;
+  $("f-telefono").value = p.cliente_telefono || "";
   $("f-indicaciones").value = p.indicaciones;
   $("f-pago").value = p.metodo_pago;
   $("f-vuelto").value = p.pago_efectivo_detalle;
@@ -593,11 +606,160 @@ function editarPedido(p) {
   $("f-desc-tipo").value = p.descuento_tipo || "";
   $("f-desc-valor").value = p.descuento_valor;
   $("f-notas").value = p.notas;
-  $("form-title").textContent = "Editar pedido #" + p.id;
+  $("form-title").textContent = "Editar pedido #" + (p.numero ?? p.id);
   $("btn-guardar").textContent = "Guardar cambios";
   renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+// ------------------------------------------------- ticket para el repartidor
+let _ticketPedido = null;
+
+function telefonoWa(tel) {
+  // Normaliza a formato wa.me: solo dígitos, con 549 (celular AR) adelante.
+  let d = (tel || "").replace(/\D/g, "").replace(/^0+/, "");
+  if (!d) return "";
+  if (!d.startsWith("54")) d = "549" + d;
+  return d;
+}
+
+function wrapText(ctx, texto, maxWidth) {
+  const palabras = texto.split(/\s+/).filter(Boolean);
+  const lineas = [];
+  let linea = "";
+  for (const p of palabras) {
+    const prueba = linea ? linea + " " + p : p;
+    if (ctx.measureText(prueba).width > maxWidth && linea) {
+      lineas.push(linea);
+      linea = p;
+    } else linea = prueba;
+  }
+  if (linea) lineas.push(linea);
+  return lineas;
+}
+
+function drawTicket(p) {
+  const W = 640, H = 800, S = 2; // lógico + escala 2x para nitidez
+  const cv = $("ticket-canvas");
+  cv.width = W * S; cv.height = H * S;
+  cv.style.width = "100%";
+  const ctx = cv.getContext("2d");
+  ctx.scale(S, S);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, W - 6, H - 6);
+  ctx.textAlign = "center";
+
+  // Número gigante.
+  ctx.fillStyle = "#111";
+  ctx.font = "900 240px Arial, sans-serif";
+  ctx.fillText(p.numero != null ? String(p.numero) : "—", W / 2, 250);
+
+  let y = 320;
+  ctx.strokeStyle = "#bbb";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(W - 50, y); ctx.stroke();
+  y += 60;
+
+  // Cliente - dirección (con wrap por si es larga).
+  ctx.fillStyle = "#111";
+  ctx.font = "bold 36px Arial, sans-serif";
+  const linea1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
+  for (const l of wrapText(ctx, linea1, W - 100)) {
+    ctx.fillText(l, W / 2, y);
+    y += 46;
+  }
+  if (p.indicaciones) {
+    ctx.fillStyle = "#555";
+    ctx.font = "28px Arial, sans-serif";
+    for (const l of wrapText(ctx, p.indicaciones, W - 100)) {
+      ctx.fillText(l, W / 2, y);
+      y += 36;
+    }
+  }
+
+  y += 24;
+  ctx.strokeStyle = "#bbb";
+  ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(W - 50, y); ctx.stroke();
+  y += 76;
+
+  // Línea de cobro.
+  if (p.metodo_pago === "Efectivo") {
+    ctx.fillStyle = "#b3261e";
+    ctx.font = "900 52px Arial, sans-serif";
+    ctx.fillText(`Cobrar: ${money(p.total)}`, W / 2, y);
+    y += 60;
+    if (p.pago_efectivo_detalle) {
+      ctx.fillStyle = "#111";
+      ctx.font = "bold 38px Arial, sans-serif";
+      for (const l of wrapText(ctx, "Cambio: " + p.pago_efectivo_detalle, W - 100)) {
+        ctx.fillText(l, W / 2, y);
+        y += 48;
+      }
+    }
+  } else {
+    ctx.fillStyle = "#1f8a4c";
+    ctx.font = "900 56px Arial, sans-serif";
+    ctx.fillText("PAGO ✔", W / 2, y);
+    y += 52;
+    ctx.fillStyle = "#555";
+    ctx.font = "30px Arial, sans-serif";
+    ctx.fillText(p.metodo_pago, W / 2, y);
+  }
+}
+
+function openTicket(p) {
+  _ticketPedido = p;
+  $("ticket-title").textContent = `Ticket pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}`;
+  drawTicket(p);
+  const conTel = !!(p.cliente_telefono || "").trim();
+  $("ticket-contacto").style.display = conTel ? "" : "none";
+  $("ticket-wa").style.display = conTel ? "" : "none";
+  if (conTel) $("ticket-wa").href = "https://wa.me/" + telefonoWa(p.cliente_telefono);
+  $("ticket-copiar").textContent = "📋 Copiar imagen";
+  $("ticket-contacto").textContent = "👤 Copiar contacto";
+  $("modal-ticket").classList.add("show");
+}
+
+function descargarTicket() {
+  const p = _ticketPedido;
+  const a = document.createElement("a");
+  a.download = `pedido-${p && p.numero != null ? p.numero : (p ? p.id : "ticket")}.png`;
+  a.href = $("ticket-canvas").toDataURL("image/png");
+  a.click();
+}
+
+$("ticket-cerrar").addEventListener("click", () => $("modal-ticket").classList.remove("show"));
+$("ticket-descargar").addEventListener("click", descargarTicket);
+
+$("ticket-copiar").addEventListener("click", async () => {
+  const btn = $("ticket-copiar");
+  try {
+    const blob = await new Promise((res) => $("ticket-canvas").toBlob(res, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    btn.textContent = "✅ ¡Copiada! Pegala en WhatsApp";
+  } catch (e) {
+    // Sin Clipboard API (navegador viejo / sin permiso): descargamos.
+    descargarTicket();
+    btn.textContent = "⬇ Se descargó (no se pudo copiar)";
+  }
+});
+
+$("ticket-contacto").addEventListener("click", async () => {
+  const p = _ticketPedido;
+  if (!p) return;
+  const texto = [p.cliente_nombre, "Tel: " + p.cliente_telefono, p.cliente_direccion]
+    .filter(Boolean).join("\n");
+  try {
+    await navigator.clipboard.writeText(texto);
+    $("ticket-contacto").textContent = "✅ Contacto copiado";
+  } catch (e) {
+    alert("No se pudo copiar. Contacto:\n\n" + texto);
+  }
+});
 
 // --------------------------------------------------------------- resumen
 async function loadResumen() {
@@ -610,11 +772,75 @@ async function loadResumen() {
     <div class="stat"><div class="k">Transferencia</div><div class="v">${money(r.por_metodo.Transferencia)}</div></div>
     <div class="stat"><div class="k">QR</div><div class="v">${money(r.por_metodo.QR)}</div></div>
     <div class="stat"><div class="k">Posnet</div><div class="v">${money(r.por_metodo.Posnet)}</div></div>
-    <div class="stat" style="grid-column:span 2;display:flex;align-items:center;justify-content:center;">
-      <button class="btn" id="btn-export">⬇ Exportar Excel del mes</button>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn" id="btn-facturar">🧾 Facturar el día</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn ok" id="btn-facturar-todo">✅ Marcar todo como facturado</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn secondary" id="btn-export-dia">⬇ Hoja del día</button>
+    </div>
+    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn" id="btn-export">⬇ Excel del mes</button>
     </div>`;
   $("btn-export").addEventListener("click", exportar);
+  $("btn-export-dia").addEventListener("click", exportarDia);
+  $("btn-facturar").addEventListener("click", openFacturacion);
+  $("btn-facturar-todo").addEventListener("click", facturarTodo);
 }
+
+// Marca todos los pedidos válidos del día como facturados de una sola vez
+// (cierre del día al pasar la lista completa a facturación).
+async function facturarTodo() {
+  const pendientes = state.pedidos.filter((p) => !p.anulado && !p.facturado).length;
+  if (!pendientes) return alert("No hay pedidos pendientes de facturar en este día.");
+  if (!confirm(`¿Marcar como facturados los ${pendientes} pedido(s) pendientes de este día?`)) return;
+  const btn = $("btn-facturar-todo");
+  btn.disabled = true; btn.textContent = "Marcando…";
+  try {
+    const r = await api("/api/pedidos/facturar-dia?fecha=" + state.fecha, { method: "POST" });
+    await loadDay();
+    alert(`Listo: ${r.facturados} pedido(s) marcados como facturados.`);
+  } catch (e) {
+    alert("Error: " + e.message);
+    btn.disabled = false; btn.textContent = "✅ Marcar todo como facturado";
+  }
+}
+
+async function exportarDia() {
+  window.location = "/api/export/dia?fecha=" + state.fecha;
+}
+
+// ------------------------------------------------------ facturación del día
+async function openFacturacion() {
+  const r = await api("/api/facturacion?fecha=" + state.fecha);
+  $("fact-fecha").textContent = state.fecha === todayISO()
+    ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
+  const cont = $("fact-cols");
+  if (!r.metodos.length) {
+    cont.innerHTML = `<p class="muted">No hay pedidos para facturar este día.</p>`;
+  } else {
+    cont.innerHTML = r.metodos.map((m) => {
+      const d = r.por_metodo[m];
+      const filas = d.items.map((it) =>
+        `<li><b>${it.cantidad}</b> ${escapeHtml(it.nombre)}</li>`).join("");
+      const envios = d.envios > 0
+        ? `<li class="fact-envio"><b>${d.envios}</b> ${d.envios === 1 ? "envío" : "envíos"}</li>` : "";
+      return `
+        <div class="fact-col">
+          <div class="fact-head">${escapeHtml(m)}</div>
+          <ul class="fact-list">${filas}${envios}</ul>
+          <div class="fact-foot">
+            <span>${d.pedidos} pedido${d.pedidos === 1 ? "" : "s"}</span>
+            <span>${money(d.total)}</span>
+          </div>
+        </div>`;
+    }).join("");
+  }
+  $("modal-fact").classList.add("show");
+}
+$("fact-cerrar").addEventListener("click", () => $("modal-fact").classList.remove("show"));
 
 async function exportar() {
   const btn = $("btn-export"); btn.disabled = true; btn.textContent = "Generando…";
@@ -742,6 +968,17 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+
+// Clase CSS de color según el método de pago (efectivo verde, transferencia
+// azul, etc.), igual que en la planilla de referencia.
+function pagoClase(metodo) {
+  return {
+    "Efectivo": "pago-efectivo",
+    "Transferencia": "pago-transferencia",
+    "QR": "pago-qr",
+    "Posnet": "pago-posnet",
+  }[metodo] || "pago-otro";
+}
 
 // HH:MM (24h) desde un ISO "YYYY-MM-DDTHH:MM:SS". El input type=time exige
 // ese formato exacto; no sirve toLocaleTimeString (devuelve "09:15 a. m.").

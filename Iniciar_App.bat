@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title Carabelas TKA - Gestor de Pedidos
+title Suipacha - Gestor de Pedidos
 cd /d "%~dp0"
 
 REM ---------------------------------------------------------------------------
-REM  Carabelas TKA - Gestor de Pedidos
+REM  Suipacha - Gestor de Pedidos
 REM  Doble clic en este archivo para arrancar la app.
 REM  Levanta el servidor con Python y abre el navegador automaticamente
 REM  en http://127.0.0.1:8000/ (lo hace run.py).
@@ -40,7 +40,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Iniciando Carabelas TKA... el navegador se abrira solo.
+echo Iniciando Suipacha... el navegador se abrira solo.
 echo Para cerrar la app, cerra esta ventana.
 echo.
 %PY% run.py
