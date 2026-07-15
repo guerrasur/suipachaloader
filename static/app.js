@@ -670,7 +670,7 @@ function renderTabla() {
         ${p.anulado ? "" : `<button class="btn ghost sm r-ticket" title="Ticket para el repartidor">🖼</button>`}
         <button class="btn ghost sm r-edit">✎</button>
         ${p.anulado
-          ? `<button class="btn secondary sm r-rest">Restaurar</button>`
+          ? `<button class="btn secondary sm r-rest">Restaurar</button> <button class="btn danger sm r-borrar" title="Borrar definitivamente">🗑</button>`
           : `<button class="btn ghost sm r-anular" title="Anular">✕</button>`}
       </td>`;
 
@@ -690,6 +690,7 @@ function renderTabla() {
     tr.querySelector(".r-edit").addEventListener("click", () => editarPedido(p));
     tr.querySelector(".r-anular")?.addEventListener("click", () => anular(p.id));
     tr.querySelector(".r-rest")?.addEventListener("click", () => restaurar(p.id));
+    tr.querySelector(".r-borrar")?.addEventListener("click", () => borrarDefinitivo(p));
     tb.appendChild(tr);
   });
 }
@@ -704,6 +705,11 @@ async function anular(id) {
 }
 async function restaurar(id) {
   await api(`/api/pedidos/${id}/restaurar`, { method: "POST" }); await loadDay();
+}
+async function borrarDefinitivo(p) {
+  if (!confirm(`¿Borrar definitivamente el pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}? Esta acción no se puede deshacer.`)) return;
+  try { await api(`/api/pedidos/${p.id}`, { method: "DELETE" }); await loadDay(); }
+  catch (e) { alert("Error: " + e.message); }
 }
 
 function editarPedido(p) {
