@@ -11,7 +11,7 @@ from sqlalchemy import text
 from . import config as cfg
 from .backup import hacer_backup
 from .database import Base, SessionLocal, engine
-from .routers import clientes, meta, pedidos, platos
+from .routers import clientes, meta, pedidos, platos, rutas
 from .seed import seed_platos
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -56,6 +56,7 @@ app.include_router(platos.router)
 app.include_router(clientes.router)
 app.include_router(pedidos.router)
 app.include_router(meta.router)
+app.include_router(rutas.router)
 
 
 @app.get("/")
