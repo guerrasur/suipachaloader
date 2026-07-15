@@ -161,8 +161,8 @@ tbody tr:hover { background: var(--brand-soft); }
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
 tr.anulado td { color: #9aa2ab; text-decoration: line-through; }
 tr.anulado:hover { background: #f3f4f7; }
-tr.salio { background: var(--ok-bg) !important; }
-tr.salio:hover { background: #d9efe1 !important; }
+tr.salio { background: #a7e3ba !important; }
+tr.salio:hover { background: #93d8a8 !important; }
 tr.demorado { background: var(--demora-bg) !important; }
 tr.demorado:hover { background: #fbd5d1 !important; }
 tr.sinfact { box-shadow: inset 4px 0 0 var(--warn); }
