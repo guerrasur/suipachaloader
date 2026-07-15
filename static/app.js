@@ -401,24 +401,46 @@ async function openRutasModal() {
   }
 }
 
+function rutasSelectHtml(gi, nombres, seleccionado) {
+  const opts = `<option value="">(sin asignar)</option>` +
+    nombres.map((n) => `<option value="${escapeAttr(n)}" ${n === seleccionado ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+  return `<select class="inline rutas-select" data-gi="${gi}">${opts}</select>`;
+}
+
+// Evita que dos grupos queden asignados al mismo repartidor por accidente:
+// al elegir un nombre en un select, lo saca de cualquier otro que lo tuviera.
+function evitarSeleccionDuplicada(cont) {
+  cont.querySelectorAll(".rutas-select").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      if (!sel.value) return;
+      cont.querySelectorAll(".rutas-select").forEach((otro) => {
+        if (otro !== sel && otro.value === sel.value) otro.value = "";
+      });
+    });
+  });
+}
+
 function renderRutas(r) {
   const cont = $("rutas-contenido");
   if (!r.grupos.length && !r.sin_geocodificar.length) {
     cont.innerHTML = `<p class="muted">No hay envíos pendientes de salir para este día.</p>`;
     return;
   }
+  const nombres = r.repartidores_dia || [];
   let html = "";
   r.grupos.forEach((g, gi) => {
     const paradas = g.pedidos.map((p, i) =>
       `<li>${i + 1}. ${escapeHtml(p.cliente_nombre || "(sin nombre)")} — ${escapeHtml(p.cliente_direccion)}${p.numero != null ? ` (N° ${p.numero})` : ""}</li>`
     ).join("");
+    const preseleccion = nombres[gi] || "";
     html += `
       <div class="card" style="margin-top:.8rem;">
-        <h3 style="margin:0 0 .4rem;">🛵 ${escapeHtml(g.repartidor || "(sin asignar)")} — ${g.pedidos.length} parada${g.pedidos.length === 1 ? "" : "s"}</h3>
+        <h3 style="margin:0 0 .4rem;">🛵 Repartidor ${escapeHtml(g.etiqueta)} — ${g.pedidos.length} parada${g.pedidos.length === 1 ? "" : "s"}</h3>
         <ol style="margin:.2rem 0 .8rem 1.2rem;padding:0;">${paradas}</ol>
-        <div class="row" style="flex-wrap:wrap;">
+        <div class="row" style="flex-wrap:wrap;align-items:center;">
           <a class="btn secondary sm" href="${g.maps_link}" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
-          <button type="button" class="btn sm rutas-asignar" data-gi="${gi}">✅ Asignar estos pedidos a ${escapeHtml(g.repartidor)}</button>
+          <label class="muted" style="margin-left:.4rem;">Asignar a:</label>
+          ${rutasSelectHtml(gi, nombres, preseleccion)}
         </div>
       </div>`;
   });
@@ -433,25 +455,42 @@ function renderRutas(r) {
         <ul style="margin:.2rem 0 0 1.2rem;padding:0;">${items}</ul>
       </div>`;
   }
+  if (r.grupos.length) {
+    html += `
+      <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+        <button type="button" class="btn" id="rutas-confirmar">✅ Confirmar y asignar todo</button>
+      </div>`;
+  }
   cont.innerHTML = html;
-  cont.querySelectorAll(".rutas-asignar").forEach((btn) =>
-    btn.addEventListener("click", async () => {
-      const g = r.grupos[+btn.dataset.gi];
-      btn.disabled = true;
-      btn.textContent = "Asignando…";
-      try {
+  evitarSeleccionDuplicada(cont);
+
+  $("rutas-confirmar")?.addEventListener("click", async () => {
+    const btn = $("rutas-confirmar");
+    const asignaciones = r.grupos.map((g, gi) => ({
+      g, repartidor: cont.querySelector(`.rutas-select[data-gi="${gi}"]`).value,
+    })).filter((a) => a.repartidor);
+
+    if (!asignaciones.length) {
+      alert("Elegí al menos un repartidor para alguno de los grupos.");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Asignando…";
+    try {
+      for (const { g, repartidor } of asignaciones) {
         for (const p of g.pedidos) {
-          await api(`/api/pedidos/${p.id}`, { method: "PATCH", body: JSON.stringify({ repartidor: g.repartidor }) });
+          await api(`/api/pedidos/${p.id}`, { method: "PATCH", body: JSON.stringify({ repartidor }) });
         }
-        btn.textContent = "✅ Asignado";
-        await loadDay();
-      } catch (e) {
-        alert("Error: " + e.message);
-        btn.disabled = false;
-        btn.textContent = `✅ Asignar estos pedidos a ${g.repartidor}`;
       }
-    })
-  );
+      btn.textContent = "✅ Asignado";
+      await loadDay();
+    } catch (e) {
+      alert("Error: " + e.message);
+      btn.disabled = false;
+      btn.textContent = "✅ Confirmar y asignar todo";
+    }
+  });
 }
 
 // -------------------------------------------------------- plato del día (día)
@@ -840,8 +879,12 @@ $("ticket-copiar").addEventListener("click", async () => {
 $("ticket-contacto").addEventListener("click", async () => {
   const p = _ticketPedido;
   if (!p) return;
-  const texto = [p.cliente_nombre, "Tel: " + p.cliente_telefono, p.cliente_direccion]
-    .filter(Boolean).join("\n");
+  const texto = [
+    p.cliente_nombre,
+    "Tel: " + p.cliente_telefono,
+    p.cliente_direccion,
+    p.cliente_direccion ? googleMapsSearchLink(p.cliente_direccion) : "",
+  ].filter(Boolean).join("\n");
   try {
     await navigator.clipboard.writeText(texto);
     $("ticket-contacto").textContent = "✅ Contacto copiado";

@@ -43,7 +43,7 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
         .all()
     )
     if not pedidos:
-        return {"fecha": fecha.isoformat(), "grupos": [], "sin_geocodificar": []}
+        return {"fecha": fecha.isoformat(), "repartidores_dia": nombres, "grupos": [], "sin_geocodificar": []}
 
     ciudad_default = cfg.get_value(db, "ciudad_default")
     direccion_local = cfg.get_value(db, "direccion_local")
@@ -65,13 +65,13 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
 
     grupos = []
     for i, idxs in enumerate(grupos_idx):
-        nombre = nombres[i] if i < len(nombres) else nombres[-1]
+        etiqueta = chr(ord("A") + i)
         puntos_grupo = [coords[j] for j in idxs]
         orden_local = ordenar_ruta(origen, puntos_grupo)
         pedidos_en_orden = [ubicados[idxs[k]] for k in orden_local]
         direcciones = [p.cliente_direccion for p in pedidos_en_orden]
         grupos.append({
-            "repartidor": nombre,
+            "etiqueta": etiqueta,
             "pedidos": [
                 {"id": p.id, "numero": p.numero, "cliente_nombre": p.cliente_nombre,
                  "cliente_direccion": p.cliente_direccion, "cliente_telefono": p.cliente_telefono}
@@ -82,6 +82,7 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
 
     return {
         "fecha": fecha.isoformat(),
+        "repartidores_dia": nombres,
         "grupos": grupos,
         "sin_geocodificar": [
             {"id": p.id, "numero": p.numero, "cliente_nombre": p.cliente_nombre,
