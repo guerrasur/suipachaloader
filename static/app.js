@@ -530,6 +530,9 @@ function renderTabla() {
     const tr = document.createElement("tr");
     if (p.anulado) tr.className = "anulado";
     else {
+      // Ya salió: fila verde (gana sobre las alertas, que sólo aplican
+      // a pedidos pendientes de salir).
+      if (p.hora_salida) tr.classList.add("salio");
       if (p.demorado) tr.classList.add("demorado");
       if (p.alerta_sin_facturar) tr.classList.add("sinfact");
     }
@@ -546,9 +549,12 @@ function renderTabla() {
       <td>${escapeHtml(p.cliente_direccion)}</td>
       <td>${items}</td>
       <td class="right nowrap">${money(p.total)}</td>
-      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}</td>
+      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}
+        <br><button class="btn sm r-pagado ${p.pagado ? "pagado-si" : "pagado-no"}" ${p.anulado ? "disabled" : ""} title="${p.pagado ? "Marcar como NO pagado" : "Marcar como pagado"}">${p.pagado ? "✔ Pagado" : "$ Sin pagar"}</button></td>
       <td>${repartidorSelectHtml(p)}</td>
-      <td><input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} /></td>
+      <td class="nowrap">${p.hora_salida
+        ? `<input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />`
+        : `<button class="btn ok sm r-salio" ${p.anulado ? "disabled" : ""} title="Marcar que el pedido salió ahora">🛵 Salió</button>`}</td>
       <td class="right"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /></td>
       <td><input class="inline r-not" value="${escapeAttr(p.notas)}" ${p.anulado ? "disabled" : ""} /></td>
       <td class="nowrap">
@@ -563,6 +569,12 @@ function renderTabla() {
     tr.querySelector(".r-rep")?.addEventListener("change", (e) => patch(p.id, { repartidor: e.target.value }));
     tr.querySelector(".r-sal")?.addEventListener("change", (e) =>
       patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null }));
+    tr.querySelector(".r-salio")?.addEventListener("click", () => {
+      const ahora = new Date();
+      const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
+      patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora}:00` });
+    });
+    tr.querySelector(".r-pagado")?.addEventListener("click", () => patch(p.id, { pagado: !p.pagado }));
     tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
     tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
     tr.querySelector(".r-ticket")?.addEventListener("click", () => openTicket(p));
