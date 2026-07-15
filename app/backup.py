@@ -5,9 +5,9 @@ import shutil
 from datetime import date
 from pathlib import Path
 
-from .database import BASE_DIR, DB_PATH
+from .database import DATA_DIR, DB_PATH
 
-BACKUP_DIR = BASE_DIR / "backups"
+BACKUP_DIR = DATA_DIR / "backups"
 MAX_BACKUPS = 30
 
 

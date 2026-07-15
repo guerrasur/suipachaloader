@@ -1008,6 +1008,10 @@ function hhmm(iso) { return iso ? String(iso).slice(11, 16) : ""; }
   // Se saltea si el usuario está en el medio de algo, para no pisar lo que
   // está tipeando ni cerrar un modal abierto.
   setInterval(() => { if (!estaOcupado()) loadDay(); }, 60000);
+  // Versión de la app en el header (no bloquea el arranque si falla).
+  api("/api/version").then((r) => {
+    if (r.version) $("app-version").textContent = "v" + r.version;
+  }).catch(() => {});
 })();
 
 // El refresco automático no debe interrumpir al usuario: hay un modal abierto,

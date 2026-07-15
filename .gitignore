@@ -10,5 +10,8 @@ __pycache__/
 venv/
 *.egg-info/
 
+# Actualizador (launcher nuevo pendiente de aplicar)
+*.bat.new
+
 # Sistema
 .DS_Store
