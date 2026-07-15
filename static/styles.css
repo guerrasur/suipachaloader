@@ -67,6 +67,7 @@ header.topbar h1 {
   font-size: 1.15rem; margin: 0; font-weight: 700; letter-spacing: -.01em;
   display: flex; align-items: center; gap: .5rem;
 }
+.app-version { font-size: .72rem; font-weight: 500; opacity: .75; align-self: flex-end; }
 .tabs { display: flex; gap: .3rem; margin-left: auto; }
 .tabs button {
   background: rgba(255,255,255,.14); color: #fff; border: 0;

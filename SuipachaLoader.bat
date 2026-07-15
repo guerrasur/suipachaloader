@@ -1,14 +1,23 @@
 @echo off
 chcp 65001 >nul
-title Suipacha - Gestor de Pedidos
 cd /d "%~dp0"
 
 REM ---------------------------------------------------------------------------
-REM  Suipacha - Gestor de Pedidos
+REM  SuipachaLoader - Gestor de Pedidos
 REM  Doble clic en este archivo para arrancar la app.
-REM  Levanta el servidor con Python y abre el navegador automaticamente
-REM  en http://127.0.0.1:8000/ (lo hace run.py).
+REM  Antes de arrancar busca actualizaciones en GitHub y se actualiza solo.
+REM  Los datos (pedidos, clientes, backups, Excel) se guardan en
+REM  %LOCALAPPDATA%\SuipachaLoader, asi que ninguna actualizacion los borra.
 REM ---------------------------------------------------------------------------
+
+REM Si una actualizacion anterior dejo un launcher nuevo, aplicarlo y relanzar.
+if exist "%~dp0SuipachaLoader.bat.new" (
+  move /y "%~dp0SuipachaLoader.bat.new" "%~f0" >nul & call "%~f0" & exit /b
+)
+
+set "VER="
+if exist VERSION set /p VER=<VERSION
+title SuipachaLoader v%VER%
 
 REM Detectar el comando de Python disponible (python o el lanzador py).
 set "PY=python"
@@ -39,8 +48,16 @@ if errorlevel 1 (
   )
 )
 
+echo Buscando actualizaciones...
+%PY% updater.py
+
+REM Releer la version por si la actualizacion la cambio.
+set "VER="
+if exist VERSION set /p VER=<VERSION
+title SuipachaLoader v%VER%
+
 echo.
-echo Iniciando Suipacha... el navegador se abrira solo.
+echo Iniciando SuipachaLoader v%VER%... el navegador se abrira solo.
 echo Para cerrar la app, cerra esta ventana.
 echo.
 %PY% run.py

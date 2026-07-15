@@ -13,10 +13,14 @@ hoja por día.
 
 ### Windows (recomendado en el mostrador)
 
-Hacé **doble clic en `Iniciar_App.bat`** (en la raíz del proyecto). Ese archivo:
+Hacé **doble clic en `SuipachaLoader.bat`** (en la raíz del proyecto). Ese archivo:
 
 - Detecta Python (`python` o el lanzador `py`).
 - La **primera vez** instala solo las dependencias (`requirements.txt`).
+- **Busca actualizaciones en GitHub** (`updater.py`) y se actualiza solo si hay
+  una versión nueva (los datos nunca se tocan). Si el repo es privado, guardá
+  un token de GitHub con permiso de lectura en
+  `%LOCALAPPDATA%\SuipachaLoader\github_token.txt`.
 - Levanta el servidor y **abre el navegador automáticamente** en
   `http://127.0.0.1:8000/`.
 
@@ -32,9 +36,14 @@ python run.py
 `run.py` levanta el servidor en `http://127.0.0.1:8000/` y abre el navegador
 automáticamente. Al arrancar:
 
-- Crea la base `data/carabelas.db` si no existe y siembra la Carta inicial.
+- Crea la base `carabelas.db` si no existe y siembra la Carta inicial. Los
+  datos viven **fuera de la carpeta de la app** — en
+  `%LOCALAPPDATA%\SuipachaLoader` (Windows) o `~/.suipachaloader` — así las
+  actualizaciones nunca los pierden. Si existe una base vieja en `data/`, se
+  migra sola la primera vez.
 - Hace un **backup automático** de la base en `backups/carabelas_<fecha>.db`
-  (conserva los últimos 30, sin intervención manual).
+  dentro de esa misma carpeta de datos (conserva los últimos 30, sin
+  intervención manual).
 
 ## Qué hace
 
@@ -66,7 +75,9 @@ automáticamente. Al arrancar:
 ## Estructura
 
 ```
-Iniciar_App.bat        # arranque en Windows (doble clic)
+SuipachaLoader.bat     # arranque en Windows (doble clic) + auto-actualización
+updater.py             # actualizador automático desde GitHub
+VERSION                # número de versión de la app
 run.py                 # arranque en un comando (server + navegador)
 app/
   main.py              # FastAPI + montaje del frontend
@@ -80,10 +91,10 @@ app/
   config.py            # parámetros configurables
   routers/             # endpoints REST
 static/                # frontend (HTML + JS liviano)
-data/                  # base SQLite (no versionada)
-backups/               # respaldos automáticos (no versionados)
-exports/               # Excel generados (no versionados)
 ```
+
+Los datos (base SQLite, `backups/` y `exports/`) se guardan en
+`%LOCALAPPDATA%\SuipachaLoader` (Windows) o `~/.suipachaloader`.
 
 ## Notas
 

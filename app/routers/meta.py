@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
@@ -19,6 +20,17 @@ from ..models import Pedido, PlatoDia, RepartidorDia
 from ..schemas import ConfigIn, PlatoDiaIn, RepartidoresDiaIn
 
 router = APIRouter(prefix="/api", tags=["meta"])
+
+_VERSION_PATH = Path(__file__).resolve().parent.parent.parent / "VERSION"
+
+
+@router.get("/version")
+def version():
+    try:
+        v = _VERSION_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        v = ""
+    return {"version": v}
 
 
 # --- Configuración ----------------------------------------------------------

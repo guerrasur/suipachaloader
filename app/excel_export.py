@@ -16,11 +16,11 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
-from .database import BASE_DIR
+from .database import DATA_DIR
 from .models import Pedido
 from .totales import monto_envio
 
-EXPORT_DIR = BASE_DIR / "exports"
+EXPORT_DIR = DATA_DIR / "exports"
 
 MESES = [
     "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
