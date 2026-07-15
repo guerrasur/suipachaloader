@@ -4,8 +4,8 @@ cd /d "%~dp0"
 
 REM ---------------------------------------------------------------------------
 REM  Suipacha Loader - Gestor de Pedidos (motor de arranque)
-REM  No usar este archivo directamente: abrí el acceso directo "Suipacha
-REM  Loader" que este mismo script crea en esta carpeta y en tu Escritorio
+REM  No usar este archivo directamente: abri el acceso directo Suipacha
+REM  Loader que este mismo script crea en esta carpeta y en tu Escritorio
 REM  (con el icono). Asi el icono siempre queda visible al abrir la app.
 REM
 REM  Antes de arrancar busca actualizaciones en GitHub y se actualiza solo.
