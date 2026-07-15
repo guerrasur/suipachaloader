@@ -28,7 +28,7 @@ MESES = [
 ]
 
 COLUMNAS = [
-    ("Hora", 8), ("Tipo", 11), ("Cliente", 20), ("Dirección", 24),
+    ("N°", 6), ("Hora", 8), ("Tipo", 11), ("Cliente", 20), ("Dirección", 24),
     ("Ítems", 40), ("Envío", 10), ("Descuento", 11), ("Total", 12),
     ("Pago", 14), ("Detalle pago", 14), ("Repartidor", 14),
     ("Hora salida", 12), ("Facturado", 11), ("Notas", 20),
@@ -174,7 +174,7 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
         envio = monto_envio(p)
         desc = _monto_descuento_export(p)
         fila = [
-            hora, p.tipo, p.cliente_nombre, p.cliente_direccion,
+            p.numero or "", hora, p.tipo, p.cliente_nombre, p.cliente_direccion,
             _items_texto(p), envio or "", desc or "", p.total,
             p.metodo_pago, p.pago_efectivo_detalle, p.repartidor,
             salida, "Sí" if p.facturado else "No",
@@ -185,10 +185,10 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
             c.border = _BORDER
             c.alignment = Alignment(
                 vertical="top",
-                wrap_text=(idx in (5, 14)),
-                horizontal="center" if idx in (9, 13) else None,
+                wrap_text=(idx in (6, 15)),
+                horizontal="center" if idx in (1, 10, 14) else None,
             )
-            if idx in (6, 7, 8):  # envío / descuento / total
+            if idx in (7, 8, 9):  # envío / descuento / total
                 c.number_format = _MONEY
             if p.anulado:
                 # Anulado: gris tachado, sin colores de estado que distraigan.
@@ -198,13 +198,15 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
                 continue
             if banda:
                 c.fill = _ZEBRA_FILL
-            if idx == 3:  # cliente en negrita
+            if idx == 1:  # número de pedido en negrita
                 c.font = _CLIENTE_FONT
-            elif idx == 9:  # método de pago con color
+            elif idx == 4:  # cliente en negrita
+                c.font = _CLIENTE_FONT
+            elif idx == 10:  # método de pago con color
                 estilo = _PAGO_ESTILO.get(p.metodo_pago)
                 if estilo:
                     c.fill, c.font = estilo
-            elif idx == 13:  # facturado sí/no con color
+            elif idx == 14:  # facturado sí/no con color
                 c.fill, c.font = _FACT_SI if p.facturado else _FACT_NO
         if not p.anulado:
             tot_dia += p.total
@@ -229,7 +231,7 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
 
 def _sumario(ws, row, etiqueta, valor, money=True, destacado=False, fill=None):
     ec = ws.cell(row=row, column=1, value=etiqueta)
-    vc = ws.cell(row=row, column=8, value=valor)
+    vc = ws.cell(row=row, column=9, value=valor)
     fuente = _SUM_TOTAL_FONT if destacado else _SUM_FONT
     ec.font = fuente
     vc.font = fuente

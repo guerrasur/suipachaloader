@@ -29,6 +29,7 @@ class Cliente(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String, index=True)
     direccion: Mapped[str] = mapped_column(String, default="")
+    telefono: Mapped[str] = mapped_column(String, default="")
     indicaciones: Mapped[str] = mapped_column(Text, default="")
     # Descuento del cliente (opcional). Si descuento_tipo es None no tiene.
     descuento_tipo: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -53,10 +54,14 @@ class Pedido(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha: Mapped[date] = mapped_column(Date, index=True, default=date.today)
+    # Número visible de dos dígitos (10-99), reinicia por día. Null en
+    # pedidos anteriores a esta funcionalidad.
+    numero: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tipo: Mapped[str] = mapped_column(String, default="Envío")
 
     cliente_nombre: Mapped[str] = mapped_column(String, default="")
     cliente_direccion: Mapped[str] = mapped_column(String, default="")
+    cliente_telefono: Mapped[str] = mapped_column(String, default="")
     indicaciones: Mapped[str] = mapped_column(Text, default="")
 
     costo_envio: Mapped[float] = mapped_column(Float, default=0.0)

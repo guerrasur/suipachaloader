@@ -12,6 +12,7 @@ from .models import METODOS_PAGO, TIPOS_DESCUENTO, TIPOS_PEDIDO
 class ClienteIn(BaseModel):
     nombre: str
     direccion: str = ""
+    telefono: str = ""
     indicaciones: str = ""
     descuento_tipo: str | None = None
     descuento_valor: float = 0.0
@@ -84,6 +85,7 @@ class PedidoIn(BaseModel):
     tipo: str = "Envío"
     cliente_nombre: str = ""
     cliente_direccion: str = ""
+    cliente_telefono: str = ""
     indicaciones: str = ""
     items: list[ItemIn] = []
     costo_envio: float = 0.0
@@ -125,6 +127,7 @@ class PedidoPatch(BaseModel):
     tipo: str | None = None
     cliente_nombre: str | None = None
     cliente_direccion: str | None = None
+    cliente_telefono: str | None = None
     indicaciones: str | None = None
     items: list[ItemIn] | None = None
     costo_envio: float | None = None
@@ -144,9 +147,11 @@ class PedidoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     fecha: date
+    numero: int | None
     tipo: str
     cliente_nombre: str
     cliente_direccion: str
+    cliente_telefono: str
     indicaciones: str
     items: list[ItemOut]
     costo_envio: float

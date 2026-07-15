@@ -49,6 +49,10 @@
               <label>Dirección</label>
               <input id="f-direccion" placeholder="Dirección" />
             </div>
+            <div class="field">
+              <label>Teléfono</label>
+              <input id="f-telefono" type="tel" placeholder="Opcional" autocomplete="off" />
+            </div>
             <div class="field grow">
               <label>Indicaciones</label>
               <input id="f-indicaciones" placeholder="Timbre, piso…" />
@@ -162,7 +166,7 @@
           <table id="tabla">
             <thead>
               <tr>
-                <th>Hora</th><th>Tipo</th><th>Cliente</th><th>Dirección</th>
+                <th>N°</th><th>Hora</th><th>Tipo</th><th>Cliente</th><th>Dirección</th>
                 <th>Ítems</th><th class="right">Total</th><th>Pago</th>
                 <th>Repartidor</th><th>Salida</th><th>Fact.</th><th>Notas</th><th></th>
               </tr>
@@ -308,6 +312,26 @@
       <div id="fact-cols" class="fact-cols"></div>
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn" id="fact-cerrar">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ticket para el repartidor -->
+  <div class="modal-back" id="modal-ticket">
+    <div class="modal">
+      <h2 id="ticket-title">Ticket para el repartidor</h2>
+      <div class="ticket-canvas-wrap">
+        <canvas id="ticket-canvas"></canvas>
+      </div>
+      <div class="row" style="margin-top:.8rem;flex-wrap:wrap;">
+        <button class="btn" id="ticket-copiar">📋 Copiar imagen</button>
+        <button class="btn secondary" id="ticket-descargar">⬇ Descargar</button>
+        <button class="btn secondary" id="ticket-contacto">👤 Copiar contacto</button>
+        <a class="btn secondary" id="ticket-wa" target="_blank" rel="noopener">💬 WhatsApp cliente</a>
+      </div>
+      <p class="muted" id="ticket-hint" style="font-size:.82rem;margin:.6rem 0 0;">Copiá la imagen y pegala (Ctrl+V) en el chat de WhatsApp del repartidor. Con "Copiar contacto" le pegás también el teléfono del cliente.</p>
+      <div class="row" style="justify-content:flex-end;margin-top:.6rem;">
+        <button class="btn ghost" id="ticket-cerrar">Cerrar</button>
       </div>
     </div>
   </div>

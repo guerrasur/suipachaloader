@@ -70,13 +70,27 @@ def listar(fecha: date | None = None, db: Session = Depends(get_db)):
     return [_serializar(db, p) for p in pedidos]
 
 
+def _proximo_numero(db: Session, fecha: date) -> int:
+    """Número visible de dos dígitos (10-99), reinicia por día.
+
+    Paso 37 (coprimo con 90): los números consecutivos quedan bien separados
+    (10, 47, 84, 31, ...) para no confundirlos, y no se repiten en 90 pedidos.
+    Cuenta también anulados para nunca reutilizar un número del día.
+    """
+    n = db.query(Pedido).filter(Pedido.fecha == fecha).count()
+    return 10 + (n * 37) % 90
+
+
 @router.post("", response_model=PedidoOut)
 def crear(data: PedidoIn, db: Session = Depends(get_db)):
+    fecha = data.fecha or date.today()
     pedido = Pedido(
-        fecha=data.fecha or date.today(),
+        fecha=fecha,
+        numero=_proximo_numero(db, fecha),
         tipo=data.tipo,
         cliente_nombre=data.cliente_nombre,
         cliente_direccion=data.cliente_direccion,
+        cliente_telefono=data.cliente_telefono,
         indicaciones=data.indicaciones,
         costo_envio=data.costo_envio,
         no_cobrar_envio=data.no_cobrar_envio,
