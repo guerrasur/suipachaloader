@@ -243,6 +243,17 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .r-pagado.pagado-no:hover { background: #ffe9c2; }
 
 /* -------------------------------------------------------------- resumen */
+.resumen-card summary {
+  display: flex; align-items: center; gap: .45rem; cursor: pointer;
+  font-size: 1.05rem; font-weight: 700; list-style: none;
+}
+.resumen-card summary::-webkit-details-marker { display: none; }
+.resumen-card summary::before { content: "▸"; font-size: .8rem; color: var(--muted); transition: transform .15s ease; }
+.resumen-card[open] summary::before { transform: rotate(90deg); }
+.resumen-card summary { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
+.resumen-card[open] summary { padding-bottom: .55rem; border-bottom: 1px solid var(--line); margin-bottom: .9rem; }
+.resumen-card #resumen { padding-top: .9rem; }
+.resumen-collapsed-hint { font-size: .82rem; font-weight: 600; color: var(--muted); }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: .7rem; }
 .summary-actions {
   display: flex; gap: .6rem; flex-wrap: wrap; align-items: center;
