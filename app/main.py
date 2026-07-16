@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import config as cfg
-from .backup import hacer_backup
+from .backup import hacer_backup, iniciar_backups_periodicos
 from .database import Base, SessionLocal, engine
 from .routers import clientes, meta, pedidos, platos, rutas
 from .seed import seed_platos
@@ -38,18 +38,49 @@ def _migrar_columnas() -> None:
                 )
 
 
+def _indice_unico_numero() -> None:
+    """Garantiza que no haya dos pedidos con el mismo número el mismo día.
+
+    SQLite no permite agregar constraints con ALTER TABLE, pero sí crear
+    índices sobre tablas existentes. Antes de crearlo se limpian duplicados
+    históricos (el bug de numeración por conteo podía repetir números): se
+    conserva el número en el pedido más viejo y se anula en el resto.
+    """
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE pedidos SET numero = NULL WHERE id NOT IN ("
+                    "  SELECT MIN(id) FROM pedidos WHERE numero IS NOT NULL"
+                    "  GROUP BY fecha, numero"
+                    ") AND numero IS NOT NULL"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_pedidos_fecha_numero"
+                    " ON pedidos(fecha, numero) WHERE numero IS NOT NULL"
+                )
+            )
+    except Exception as e:  # nunca impedir el arranque por el índice
+        print(f"[aviso] No se pudo crear el índice único de números: {e}")
+
+
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
     _migrar_columnas()
+    _indice_unico_numero()
     db = SessionLocal()
     try:
         cfg.ensure_defaults(db)
         seed_platos(db)
     finally:
         db.close()
-    # Backup diario automático al arrancar (idempotente por fecha).
+    # Backup diario automático al arrancar (idempotente por fecha) y
+    # refresco periódico para no depender solo del momento de arranque.
     hacer_backup()
+    iniciar_backups_periodicos()
 
 
 app.include_router(platos.router)

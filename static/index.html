@@ -24,7 +24,7 @@
 
       <div class="card">
         <div class="row between">
-          <h2 id="form-title">Nuevo pedido</h2>
+          <h2 id="form-title">📝 Nuevo pedido</h2>
           <div class="daynav">
             <button type="button" class="btn secondary sm" id="btn-repartidores" title="Repartidores del día">🛵 <span id="rep-dia-label">Repartidores</span></button>
             <button type="button" class="btn secondary sm" id="btn-plato-dia" title="Plato del día">🍽 <span id="pdd-dia-label">Plato del día</span></button>
@@ -38,7 +38,6 @@
         <div id="banner-hora" class="banner warn"></div>
 
         <form id="pedido-form">
-          <input type="hidden" id="pedido-id" />
           <div class="row">
             <div class="field grow autocomplete">
               <label>Cliente</label>
@@ -110,7 +109,7 @@
           <div class="row" id="row-envio">
             <div class="field">
               <label>Costo de envío</label>
-              <input type="number" id="f-envio" step="100" />
+              <input type="number" id="f-envio" step="100" min="0" />
             </div>
             <div class="field">
               <label>&nbsp;</label>
@@ -126,7 +125,7 @@
             </div>
             <div class="field">
               <label>Valor descuento</label>
-              <input type="number" id="f-desc-valor" step="100" value="0" />
+              <input type="number" id="f-desc-valor" step="100" min="0" value="0" />
             </div>
             <div class="field grow">
               <label>Notas</label>
@@ -134,7 +133,7 @@
             </div>
           </div>
 
-          <div class="row" style="justify-content:space-between;align-items:center;margin-top:.6rem;">
+          <div class="total-line">
             <div>
               <span class="muted">Total</span>
               <div class="total-box" id="f-total">$0</div>
@@ -149,28 +148,37 @@
 
       <!-- Resumen de caja -->
       <div class="card">
-        <h2>Resumen de caja del día</h2>
-        <div class="summary-grid" id="resumen"></div>
+        <h2>💰 Resumen de caja del día</h2>
+        <div id="resumen"></div>
       </div>
 
       <!-- Tabla del día -->
       <div class="card">
+        <h2>📋 Pedidos del día</h2>
         <div class="filters" id="filters">
           <span class="muted">Filtros:</span>
           <button class="chip active" data-f="todos">Todos</button>
           <button class="chip" data-f="pend-salir">Pendientes de salir</button>
           <button class="chip" data-f="pend-facturar">Pendientes de facturar</button>
-          <button class="chip" data-f="ventanilla">Ventanilla</button>
           <button class="chip" data-f="envio">Envío</button>
+          <button class="chip" data-f="takeaway">Take away</button>
+          <button class="chip" data-f="reserva">Reserva</button>
+          <button class="chip" data-f="ventanilla">Ventanilla</button>
           <button type="button" class="btn secondary sm" id="btn-rutas" title="Agrupar los envíos pendientes por cercanía" style="margin-left:auto;">🗺️ Optimizar rutas</button>
+        </div>
+        <div class="leyenda muted">
+          <span><i class="dot dot-ok"></i> Salió</span>
+          <span><i class="dot dot-danger"></i> Demorado</span>
+          <span><i class="dot dot-warn"></i> Sin facturar (tarde)</span>
+          <span><i class="dot dot-anulado"></i> Anulado</span>
         </div>
         <div class="tbl-wrap">
           <table id="tabla">
             <thead>
               <tr>
-                <th>N°</th><th>Hora</th><th>Tipo</th><th>Cliente</th><th>Dirección</th>
+                <th>N°</th><th>Hora</th><th>Tipo</th><th>Cliente</th>
                 <th>Ítems</th><th class="right">Total</th><th>Pago</th>
-                <th>Repartidor</th><th>Salida</th><th>Fact.</th><th>Notas</th><th></th>
+                <th>Repartidor</th><th>Estado</th><th>Notas</th><th></th>
               </tr>
             </thead>
             <tbody id="tabla-body"></tbody>
@@ -380,6 +388,8 @@
       </div>
     </div>
   </div>
+
+  <div id="toasts" aria-live="polite"></div>
 
   <script src="/app.js"></script>
 </body>

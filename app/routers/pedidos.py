@@ -74,11 +74,22 @@ def _proximo_numero(db: Session, fecha: date) -> int:
     """Número visible de dos dígitos (10-99), reinicia por día.
 
     Paso 37 (coprimo con 90): los números consecutivos quedan bien separados
-    (10, 47, 84, 31, ...) para no confundirlos, y no se repiten en 90 pedidos.
-    Cuenta también anulados para nunca reutilizar un número del día.
+    (10, 47, 84, 31, ...) para no confundirlos. Se recorre esa secuencia y se
+    devuelve el primer número que no esté ya emitido ese día (anulados
+    incluidos), así los borrados definitivos nunca provocan que se repita el
+    número de un pedido vivo. Si un día supera los 90 pedidos, sigue en 100+.
     """
-    n = db.query(Pedido).filter(Pedido.fecha == fecha).count()
-    return 10 + (n * 37) % 90
+    usados = {
+        n
+        for (n,) in db.query(Pedido.numero).filter(
+            Pedido.fecha == fecha, Pedido.numero.isnot(None)
+        )
+    }
+    for i in range(90):
+        candidato = 10 + (i * 37) % 90
+        if candidato not in usados:
+            return candidato
+    return max(usados) + 1
 
 
 @router.post("", response_model=PedidoOut)
@@ -110,7 +121,7 @@ def crear(data: PedidoIn, db: Session = Depends(get_db)):
     return pedido
 
 
-@router.patch("/{pedido_id}", response_model=PedidoOut)
+@router.patch("/{pedido_id}")
 def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     pedido = db.get(Pedido, pedido_id)
     if not pedido:
@@ -135,7 +146,8 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     pedido.total = calcular_total(pedido)
     db.commit()
     db.refresh(pedido)
-    return pedido
+    # Con las banderas de alerta: el frontend actualiza la fila sin recargar.
+    return _serializar(db, pedido)
 
 
 @router.post("/facturar-dia")
@@ -161,7 +173,7 @@ def facturar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
     return {"fecha": fecha.isoformat(), "facturados": len(pendientes)}
 
 
-@router.post("/{pedido_id}/anular", response_model=PedidoOut)
+@router.post("/{pedido_id}/anular")
 def anular(pedido_id: int, db: Session = Depends(get_db)):
     """Anula (no borra): queda visible pero no suma ni alerta."""
     pedido = db.get(Pedido, pedido_id)
@@ -170,10 +182,10 @@ def anular(pedido_id: int, db: Session = Depends(get_db)):
     pedido.anulado = True
     db.commit()
     db.refresh(pedido)
-    return pedido
+    return _serializar(db, pedido)
 
 
-@router.post("/{pedido_id}/restaurar", response_model=PedidoOut)
+@router.post("/{pedido_id}/restaurar")
 def restaurar(pedido_id: int, db: Session = Depends(get_db)):
     pedido = db.get(Pedido, pedido_id)
     if not pedido:
@@ -181,7 +193,7 @@ def restaurar(pedido_id: int, db: Session = Depends(get_db)):
     pedido.anulado = False
     db.commit()
     db.refresh(pedido)
-    return pedido
+    return _serializar(db, pedido)
 
 
 @router.delete("/{pedido_id}", status_code=204)

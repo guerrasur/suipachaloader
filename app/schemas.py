@@ -3,9 +3,37 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from .models import METODOS_PAGO, TIPOS_DESCUENTO, TIPOS_PEDIDO
+
+
+# --- Validadores compartidos (aceptan None para los schemas de PATCH) --------
+def _validar_tipo(v):
+    if v is not None and v not in TIPOS_PEDIDO:
+        raise ValueError(f"tipo debe ser uno de {TIPOS_PEDIDO}")
+    return v
+
+
+def _validar_metodo_pago(v):
+    if v is not None and v not in METODOS_PAGO:
+        raise ValueError(f"metodo_pago debe ser uno de {METODOS_PAGO}")
+    return v
+
+
+def _validar_descuento_tipo(v):
+    if v in (None, "", "ninguno"):
+        return None
+    if v not in TIPOS_DESCUENTO:
+        raise ValueError(f"descuento_tipo debe ser uno de {TIPOS_DESCUENTO}")
+    return v
+
+
+def _no_negativo(v):
+    """Los montos nunca son negativos (un descuento negativo subiría el total)."""
+    if v is None:
+        return v
+    return max(0.0, float(v))
 
 
 # --- Clientes ---------------------------------------------------------------
@@ -17,14 +45,8 @@ class ClienteIn(BaseModel):
     descuento_tipo: str | None = None
     descuento_valor: float = 0.0
 
-    @field_validator("descuento_tipo")
-    @classmethod
-    def _val_desc(cls, v):
-        if v in (None, "", "ninguno"):
-            return None
-        if v not in TIPOS_DESCUENTO:
-            raise ValueError(f"descuento_tipo debe ser uno de {TIPOS_DESCUENTO}")
-        return v
+    _v_desc = field_validator("descuento_tipo")(_validar_descuento_tipo)
+    _v_val = field_validator("descuento_valor")(_no_negativo)
 
 
 class ClienteOut(ClienteIn):
@@ -74,6 +96,8 @@ class ItemIn(BaseModel):
     def _val_cant(cls, v):
         return max(1, int(v))
 
+    _v_precio = field_validator("precio_unitario")(_no_negativo)
+
 
 class ItemOut(ItemIn):
     model_config = ConfigDict(from_attributes=True)
@@ -97,28 +121,17 @@ class PedidoIn(BaseModel):
     repartidor: str = ""
     notas: str = ""
 
-    @field_validator("tipo")
-    @classmethod
-    def _val_tipo(cls, v):
-        if v not in TIPOS_PEDIDO:
-            raise ValueError(f"tipo debe ser uno de {TIPOS_PEDIDO}")
-        return v
+    _v_tipo = field_validator("tipo")(_validar_tipo)
+    _v_pago = field_validator("metodo_pago")(_validar_metodo_pago)
+    _v_desc = field_validator("descuento_tipo")(_validar_descuento_tipo)
+    _v_desc_val = field_validator("descuento_valor")(_no_negativo)
+    _v_envio = field_validator("costo_envio")(_no_negativo)
 
-    @field_validator("metodo_pago")
-    @classmethod
-    def _val_pago(cls, v):
-        if v not in METODOS_PAGO:
-            raise ValueError(f"metodo_pago debe ser uno de {METODOS_PAGO}")
-        return v
-
-    @field_validator("descuento_tipo")
-    @classmethod
-    def _val_desc(cls, v):
-        if v in (None, "", "ninguno"):
-            return None
-        if v not in TIPOS_DESCUENTO:
-            raise ValueError(f"descuento_tipo debe ser uno de {TIPOS_DESCUENTO}")
-        return v
+    @model_validator(mode="after")
+    def _tope_porcentaje(self):
+        if self.descuento_tipo == "porcentaje" and (self.descuento_valor or 0) > 100:
+            self.descuento_valor = 100.0
+        return self
 
 
 class PedidoPatch(BaseModel):
@@ -142,6 +155,18 @@ class PedidoPatch(BaseModel):
     pagado: bool | None = None
     notas: str | None = None
     fecha: date | None = None
+
+    _v_tipo = field_validator("tipo")(_validar_tipo)
+    _v_pago = field_validator("metodo_pago")(_validar_metodo_pago)
+    _v_desc = field_validator("descuento_tipo")(_validar_descuento_tipo)
+    _v_desc_val = field_validator("descuento_valor")(_no_negativo)
+    _v_envio = field_validator("costo_envio")(_no_negativo)
+
+    @model_validator(mode="after")
+    def _tope_porcentaje(self):
+        if self.descuento_tipo == "porcentaje" and (self.descuento_valor or 0) > 100:
+            self.descuento_valor = 100.0
+        return self
 
 
 class PedidoOut(BaseModel):
