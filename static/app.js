@@ -147,7 +147,7 @@ function renderItems() {
     line.innerHTML = `
       ${selHtml}
       <input type="number" min="1" data-idx="${idx}" class="it-cant" value="${it.cantidad}" />
-      <input type="number" step="100" data-idx="${idx}" class="it-precio" value="${it.precio_unitario}" />
+      <input type="number" step="100" min="0" data-idx="${idx}" class="it-precio" value="${it.precio_unitario}" />
       <span class="right nowrap">${money(it.cantidad * it.precio_unitario)}</span>
       <button type="button" class="btn ghost sm" data-idx="${idx}" title="Quitar">✕</button>`;
     cont.appendChild(line);
@@ -202,10 +202,12 @@ function montoEnvio() {
   return +$("f-envio").value || 0;
 }
 function montoDescuento(sub) {
+  // Mismos clamps que el backend (totales.py): sin negativos, porcentaje
+  // tope 100, y el descuento por monto nunca supera el subtotal.
   const tipo = $("f-desc-tipo").value;
-  const val = +$("f-desc-valor").value || 0;
+  const val = Math.max(0, +$("f-desc-valor").value || 0);
   if (!tipo || !val) return 0;
-  return tipo === "porcentaje" ? sub * val / 100 : val;
+  return tipo === "porcentaje" ? sub * Math.min(val, 100) / 100 : Math.min(val, sub);
 }
 let currentTotal = 0;
 function recalc() {

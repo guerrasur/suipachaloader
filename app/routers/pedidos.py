@@ -74,11 +74,22 @@ def _proximo_numero(db: Session, fecha: date) -> int:
     """Número visible de dos dígitos (10-99), reinicia por día.
 
     Paso 37 (coprimo con 90): los números consecutivos quedan bien separados
-    (10, 47, 84, 31, ...) para no confundirlos, y no se repiten en 90 pedidos.
-    Cuenta también anulados para nunca reutilizar un número del día.
+    (10, 47, 84, 31, ...) para no confundirlos. Se recorre esa secuencia y se
+    devuelve el primer número que no esté ya emitido ese día (anulados
+    incluidos), así los borrados definitivos nunca provocan que se repita el
+    número de un pedido vivo. Si un día supera los 90 pedidos, sigue en 100+.
     """
-    n = db.query(Pedido).filter(Pedido.fecha == fecha).count()
-    return 10 + (n * 37) % 90
+    usados = {
+        n
+        for (n,) in db.query(Pedido.numero).filter(
+            Pedido.fecha == fecha, Pedido.numero.isnot(None)
+        )
+    }
+    for i in range(90):
+        candidato = 10 + (i * 37) % 90
+        if candidato not in usados:
+            return candidato
+    return max(usados) + 1
 
 
 @router.post("", response_model=PedidoOut)
