@@ -990,9 +990,16 @@ $("ticket-contacto").addEventListener("click", async () => {
 });
 
 // --------------------------------------------------------------- resumen
+const resumenDetails = $("resumen-details");
+resumenDetails.open = localStorage.getItem("resumenAbierto") === "1";
+resumenDetails.addEventListener("toggle", () => {
+  localStorage.setItem("resumenAbierto", resumenDetails.open ? "1" : "0");
+});
+
 async function loadResumen() {
   const r = await api("/api/resumen?fecha=" + state.fecha);
   const g = $("resumen");
+  $("resumen-collapsed-hint").textContent = `— ${money(r.total)} · ${r.cantidad} pedido${r.cantidad === 1 ? "" : "s"}`;
   // Los puntitos de color de cada método repiten el color de las pills de la
   // tabla, para conectar visualmente el resumen con los pedidos.
   g.innerHTML = `
