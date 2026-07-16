@@ -235,6 +235,15 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .pago-pill.pago-posnet { background: #b26a00; }
 .pago-pill.pago-otro { background: #6b7684; }
 
+/* Select de método de pago en el formulario: mismo código de color que la
+   píldora, para que se note de un vistazo qué método está elegido. */
+.select-pago { font-weight: 700; color: #fff; border-color: transparent; }
+.select-pago.pago-efectivo { background: #1f8a4c; }
+.select-pago.pago-transferencia { background: #2f6fd0; }
+.select-pago.pago-qr { background: #7a4fd0; }
+.select-pago.pago-posnet { background: #b26a00; }
+.select-pago.pago-otro { background: #6b7684; }
+
 /* Botón de pago recibido (comprobante de transferencia / efectivo cobrado). */
 .r-pagado { margin-top: .25rem; }
 .r-pagado.pagado-si { background: var(--ok); color: #fff; }
