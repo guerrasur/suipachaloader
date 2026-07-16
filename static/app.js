@@ -897,26 +897,13 @@ function drawTicket(p) {
   ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(W - 50, y); ctx.stroke();
   y += 76;
 
-  // Línea de cobro.
+  // Línea de cobro. El vuelto es solo para uso interno (formulario y tabla
+  // de pedidos): no se imprime acá, el repartidor no necesita ese dato.
   if (p.metodo_pago === "Efectivo") {
     ctx.fillStyle = "#b3261e";
     ctx.font = "900 52px Arial, sans-serif";
     ctx.fillText(`Cobrar: ${money(p.total)}`, W / 2, y);
     y += 60;
-    if (p.pago_efectivo_detalle) {
-      const vuelto = calcularVuelto(p.pago_efectivo_detalle, p.total);
-      const texto = vuelto === null
-        ? "Cambio: " + p.pago_efectivo_detalle
-        : vuelto > 0
-          ? `Paga con ${p.pago_efectivo_detalle} → Vuelto: ${money(vuelto)}`
-          : "Sin vuelto (paga justo)";
-      ctx.fillStyle = "#111";
-      ctx.font = "bold 38px Arial, sans-serif";
-      for (const l of wrapText(ctx, texto, W - 100)) {
-        ctx.fillText(l, W / 2, y);
-        y += 48;
-      }
-    }
   } else {
     ctx.fillStyle = "#1f8a4c";
     ctx.font = "900 56px Arial, sans-serif";
