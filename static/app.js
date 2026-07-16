@@ -23,6 +23,19 @@ function vueltoSufijo(p) {
 }
 const todayISO = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
 
+// Aviso no bloqueante abajo a la derecha. tipo: "ok" | "error" | "info".
+function toast(msg, tipo = "info") {
+  const t = document.createElement("div");
+  t.className = "toast " + tipo;
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(() => {
+    t.classList.add("out");
+    t.addEventListener("transitionend", () => t.remove(), { once: true });
+    setTimeout(() => t.remove(), 600); // por si reduced-motion saltea la transición
+  }, tipo === "error" ? 6000 : 3500);
+}
+
 async function api(url, opts) {
   const r = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -300,17 +313,20 @@ $("pedido-form").addEventListener("submit", async (e) => {
     notas: $("f-notas").value.trim(),
   };
   try {
-    if (state.editId) {
-      await api(`/api/pedidos/${state.editId}`, { method: "PATCH", body: JSON.stringify(body) });
+    const editando = !!state.editId;
+    let guardado;
+    if (editando) {
+      guardado = await api(`/api/pedidos/${state.editId}`, { method: "PATCH", body: JSON.stringify(body) });
     } else {
-      await api("/api/pedidos", { method: "POST", body: JSON.stringify(body) });
+      guardado = await api("/api/pedidos", { method: "POST", body: JSON.stringify(body) });
     }
     // Guardar/actualizar cliente para autocompletado futuro.
     if (body.cliente_nombre) saveClienteQuiet(body);
     resetForm();
     await loadDay();
+    toast(editando ? `Cambios guardados en el pedido N° ${guardado.numero ?? "—"}` : `Pedido N° ${guardado.numero ?? "—"} guardado`, "ok");
   } catch (err) {
-    alert("Error al guardar: " + err.message);
+    toast("Error al guardar: " + err.message, "error");
   }
 });
 
@@ -343,7 +359,7 @@ function resetForm() {
   $("pedido-form").reset();
   $("f-fecha").value = state.fecha;
   $("f-envio").value = _cfgCache ? _cfgCache.costo_envio_default : 3000;
-  $("form-title").textContent = "Nuevo pedido";
+  $("form-title").textContent = "📝 Nuevo pedido";
   $("btn-guardar").textContent = "Guardar pedido";
   fillRepartidorSelect($("f-repartidor"), "");
   renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla(); checkHoraLimite();
@@ -507,7 +523,7 @@ function renderRutas(r) {
     })).filter((a) => a.repartidor);
 
     if (!asignaciones.length) {
-      alert("Elegí al menos un repartidor para alguno de los grupos.");
+      toast("Elegí al menos un repartidor para alguno de los grupos.", "error");
       return;
     }
 
@@ -522,7 +538,7 @@ function renderRutas(r) {
       btn.textContent = "✅ Asignado";
       await loadDay();
     } catch (e) {
-      alert("Error: " + e.message);
+      toast("Error: " + e.message, "error");
       btn.disabled = false;
       btn.textContent = "✅ Confirmar y asignar todo";
     }
@@ -559,7 +575,7 @@ $("pdd-save").addEventListener("click", async () => {
     precio_efectivo: hay ? (+$("pdd-ef").value || 0) : 0,
     precio_lista: hay ? (+$("pdd-li").value || 0) : 0,
   };
-  if (hay && !body.nombre) return alert("Poné el nombre del plato del día (o destildá \"Hoy hay plato del día\").");
+  if (hay && !body.nombre) return toast("Poné el nombre del plato del día (o destildá \"Hoy hay plato del día\").", "error");
   await api("/api/plato-del-dia?fecha=" + state.fecha, { method: "PUT", body: JSON.stringify(body) });
   $("modal-pdd").classList.remove("show");
   await loadPlatoDia();
@@ -656,6 +672,8 @@ function pasaFiltro(p) {
     case "pend-facturar": return !p.facturado && !p.anulado;
     case "ventanilla": return p.tipo === "Ventanilla";
     case "envio": return p.tipo === "Envío";
+    case "takeaway": return p.tipo === "Take away";
+    case "reserva": return p.tipo === "Reserva";
     default: return true;
   }
 }
@@ -671,81 +689,111 @@ function repartidorSelectHtml(p) {
 function renderTabla() {
   const tb = $("tabla-body");
   tb.innerHTML = "";
-  state.pedidos.filter(pasaFiltro).forEach((p) => {
-    const tr = document.createElement("tr");
-    if (p.anulado) tr.className = "anulado";
+  state.pedidos.filter(pasaFiltro).forEach((p) => tb.appendChild(renderRow(p)));
+}
+
+function renderRow(p) {
+  const tr = document.createElement("tr");
+  tr.dataset.id = p.id;
+  if (p.anulado) tr.className = "anulado";
+  else {
+    // Ya salió: fila verde (gana sobre las alertas de color; el badge
+    // SIN FACT. en la celda Estado sigue avisando igual).
+    if (p.hora_salida) tr.classList.add("salio");
     else {
-      // Ya salió: fila verde (gana sobre las alertas, que sólo aplican
-      // a pedidos pendientes de salir).
-      if (p.hora_salida) tr.classList.add("salio");
       if (p.demorado) tr.classList.add("demorado");
       if (p.alerta_sin_facturar) tr.classList.add("sinfact");
     }
-    const items = p.items.map((i) => `${i.cantidad}x ${escapeHtml(i.nombre)}`).join("<br>");
-    const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
-                   (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span>' : "");
-    const hs = hhmm(p.hora_salida);
-    const hp = hhmm(p.hora_pedido);
-    tr.innerHTML = `
-      <td class="num-pedido">${p.numero ?? "—"}</td>
-      <td class="nowrap">${hp} ${badges}</td>
-      <td>${p.tipo}</td>
-      <td>${escapeHtml(p.cliente_nombre)}</td>
-      <td>${escapeHtml(p.cliente_direccion)}</td>
-      <td>${items}</td>
-      <td class="right nowrap">${money(p.total)}</td>
-      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + vueltoSufijo(p) + "</small>" : ""}
-        <br><button class="btn sm r-pagado ${p.pagado ? "pagado-si" : "pagado-no"}" ${p.anulado ? "disabled" : ""} title="${p.pagado ? "Marcar como NO pagado" : "Marcar como pagado"}">${p.pagado ? "✔ Pagado" : "$ Sin pagar"}</button></td>
-      <td>${repartidorSelectHtml(p)}</td>
-      <td class="nowrap">${p.hora_salida
-        ? `<input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />`
-        : `<button class="btn ok sm r-salio" ${p.anulado ? "disabled" : ""} title="Marcar que el pedido salió ahora">🛵 Salió</button>`}</td>
-      <td class="right"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /></td>
-      <td><input class="inline r-not" value="${escapeAttr(p.notas)}" ${p.anulado ? "disabled" : ""} /></td>
-      <td class="nowrap">
-        ${p.anulado ? "" : `<button class="btn ghost sm r-ticket" title="Ticket para el repartidor">🖼</button>`}
-        <button class="btn ghost sm r-edit">✎</button>
-        ${p.anulado
-          ? `<button class="btn secondary sm r-rest">Restaurar</button> <button class="btn danger sm r-borrar" title="Borrar definitivamente">🗑</button>`
-          : `<button class="btn ghost sm r-anular" title="Anular">✕</button>`}
-      </td>`;
+  }
+  const items = p.items.map((i) => `${i.cantidad}x ${escapeHtml(i.nombre)}`).join("<br>");
+  const hs = hhmm(p.hora_salida);
+  const hp = hhmm(p.hora_pedido);
+  // Todo el estado del pedido (salida, alertas, facturado) vive en una sola
+  // celda "Estado" para poder leerlo de un vistazo.
+  const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
+                 (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span> ' : "");
+  const salida = p.hora_salida
+    ? `<span class="badge salio">🛵 SALIÓ</span> <input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />`
+    : `<button class="btn ok sm r-salio" ${p.anulado ? "disabled" : ""} title="Marcar que el pedido salió ahora">🛵 Salió</button>`;
+  tr.innerHTML = `
+    <td class="num-pedido">${p.numero ?? "—"}</td>
+    <td class="nowrap">${hp}</td>
+    <td><span class="tipo-pill">${escapeHtml(p.tipo)}</span></td>
+    <td><div>${escapeHtml(p.cliente_nombre)}</div><small class="muted">${escapeHtml(p.cliente_direccion)}</small></td>
+    <td class="td-items">${items}</td>
+    <td class="right nowrap">${money(p.total)}</td>
+    <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + vueltoSufijo(p) + "</small>" : ""}
+      <br><button class="btn sm r-pagado ${p.pagado ? "pagado-si" : "pagado-no"}" ${p.anulado ? "disabled" : ""} title="${p.pagado ? "Marcar como NO pagado" : "Marcar como pagado"}">${p.pagado ? "✔ Pagado" : "$ Sin pagar"}</button></td>
+    <td>${repartidorSelectHtml(p)}</td>
+    <td class="nowrap td-estado">${badges}${salida}
+      <label class="fact-check"><input type="checkbox" class="r-fac" ${p.facturado ? "checked" : ""} ${p.anulado ? "disabled" : ""} /> Fact.</label></td>
+    <td><input class="inline r-not" value="${escapeAttr(p.notas)}" ${p.anulado ? "disabled" : ""} /></td>
+    <td class="nowrap">
+      ${p.anulado ? "" : `<button class="btn ghost sm r-ticket" title="Ticket para el repartidor" aria-label="Ticket para el repartidor">🖼</button>`}
+      <button class="btn ghost sm r-edit" title="Editar" aria-label="Editar">✎</button>
+      ${p.anulado
+        ? `<button class="btn secondary sm r-rest">Restaurar</button> <button class="btn danger sm r-borrar" title="Borrar definitivamente" aria-label="Borrar definitivamente">🗑</button>`
+        : `<button class="btn ghost sm r-anular" title="Anular" aria-label="Anular">✕</button>`}
+    </td>`;
 
-    // inline handlers
-    tr.querySelector(".r-rep")?.addEventListener("change", (e) => patch(p.id, { repartidor: e.target.value }));
-    tr.querySelector(".r-sal")?.addEventListener("change", (e) =>
-      patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null }));
-    tr.querySelector(".r-salio")?.addEventListener("click", () => {
-      const ahora = new Date();
-      const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
-      patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora}:00` });
-    });
-    tr.querySelector(".r-pagado")?.addEventListener("click", () => patch(p.id, { pagado: !p.pagado }));
-    tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
-    tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
-    tr.querySelector(".r-ticket")?.addEventListener("click", () => openTicket(p));
-    tr.querySelector(".r-edit").addEventListener("click", () => editarPedido(p));
-    tr.querySelector(".r-anular")?.addEventListener("click", () => anular(p.id));
-    tr.querySelector(".r-rest")?.addEventListener("click", () => restaurar(p.id));
-    tr.querySelector(".r-borrar")?.addEventListener("click", () => borrarDefinitivo(p));
-    tb.appendChild(tr);
+  // inline handlers
+  tr.querySelector(".r-rep")?.addEventListener("change", (e) => patch(p.id, { repartidor: e.target.value }));
+  tr.querySelector(".r-sal")?.addEventListener("change", (e) =>
+    patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null }));
+  tr.querySelector(".r-salio")?.addEventListener("click", () => {
+    const ahora = new Date();
+    const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
+    patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora}:00` });
   });
+  tr.querySelector(".r-pagado")?.addEventListener("click", () => patch(p.id, { pagado: !p.pagado }));
+  tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
+  tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
+  tr.querySelector(".r-ticket")?.addEventListener("click", () => openTicket(p));
+  tr.querySelector(".r-edit").addEventListener("click", () => editarPedido(p));
+  tr.querySelector(".r-anular")?.addEventListener("click", () => anular(p.id));
+  tr.querySelector(".r-rest")?.addEventListener("click", () => restaurar(p.id));
+  tr.querySelector(".r-borrar")?.addEventListener("click", () => borrarDefinitivo(p));
+  return tr;
+}
+
+// Reemplaza en la tabla (y en state) sólo el pedido tocado, sin recargar
+// todo el día: no hay flicker ni pérdida de foco en las demás filas.
+function actualizarPedidoEnTabla(actualizado) {
+  const i = state.pedidos.findIndex((p) => p.id === actualizado.id);
+  if (i >= 0) state.pedidos[i] = actualizado;
+  const tr = $("tabla-body").querySelector(`tr[data-id="${actualizado.id}"]`);
+  if (tr) {
+    if (pasaFiltro(actualizado)) tr.replaceWith(renderRow(actualizado));
+    else tr.remove(); // ej: filtro "pendientes" y el pedido dejó de estarlo
+  }
+  loadResumen(); // los totales del día pueden haber cambiado
 }
 
 async function patch(id, body) {
-  try { await api(`/api/pedidos/${id}`, { method: "PATCH", body: JSON.stringify(body) }); await loadDay(); }
-  catch (e) { alert("Error: " + e.message); }
+  try {
+    const actualizado = await api(`/api/pedidos/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    actualizarPedidoEnTabla(actualizado);
+  } catch (e) { toast("Error: " + e.message, "error"); }
 }
 async function anular(id) {
   if (!confirm("¿Anular este pedido? Queda visible pero no suma a los totales.")) return;
-  await api(`/api/pedidos/${id}/anular`, { method: "POST" }); await loadDay();
+  try {
+    actualizarPedidoEnTabla(await api(`/api/pedidos/${id}/anular`, { method: "POST" }));
+  } catch (e) { toast("Error: " + e.message, "error"); }
 }
 async function restaurar(id) {
-  await api(`/api/pedidos/${id}/restaurar`, { method: "POST" }); await loadDay();
+  try {
+    actualizarPedidoEnTabla(await api(`/api/pedidos/${id}/restaurar`, { method: "POST" }));
+  } catch (e) { toast("Error: " + e.message, "error"); }
 }
 async function borrarDefinitivo(p) {
   if (!confirm(`¿Borrar definitivamente el pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}? Esta acción no se puede deshacer.`)) return;
-  try { await api(`/api/pedidos/${p.id}`, { method: "DELETE" }); await loadDay(); }
-  catch (e) { alert("Error: " + e.message); }
+  try {
+    await api(`/api/pedidos/${p.id}`, { method: "DELETE" });
+    state.pedidos = state.pedidos.filter((x) => x.id !== p.id);
+    $("tabla-body").querySelector(`tr[data-id="${p.id}"]`)?.remove();
+    loadResumen();
+  } catch (e) { toast("Error: " + e.message, "error"); }
 }
 
 function editarPedido(p) {
@@ -769,7 +817,7 @@ function editarPedido(p) {
   $("f-desc-tipo").value = p.descuento_tipo || "";
   $("f-desc-valor").value = p.descuento_valor;
   $("f-notas").value = p.notas;
-  $("form-title").textContent = "Editar pedido #" + (p.numero ?? p.id);
+  $("form-title").textContent = "✎ Editar pedido N° " + (p.numero ?? p.id);
   $("btn-guardar").textContent = "Guardar cambios";
   renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -937,7 +985,7 @@ $("ticket-contacto").addEventListener("click", async () => {
     await navigator.clipboard.writeText(texto);
     $("ticket-contacto").textContent = "✅ Contacto copiado";
   } catch (e) {
-    alert("No se pudo copiar. Contacto:\n\n" + texto);
+    toast("No se pudo copiar el contacto al portapapeles.", "error");
   }
 });
 
@@ -945,25 +993,27 @@ $("ticket-contacto").addEventListener("click", async () => {
 async function loadResumen() {
   const r = await api("/api/resumen?fecha=" + state.fecha);
   const g = $("resumen");
+  // Los puntitos de color de cada método repiten el color de las pills de la
+  // tabla, para conectar visualmente el resumen con los pedidos.
   g.innerHTML = `
-    <div class="stat stat-total"><div class="k">Total del día</div><div class="v">${money(r.total)}</div></div>
-    <div class="stat"><div class="k">Pedidos</div><div class="v">${r.cantidad}</div></div>
-    <div class="stat"><div class="k">Efectivo</div><div class="v">${money(r.por_metodo.Efectivo)}</div></div>
-    <div class="stat"><div class="k">Transferencia</div><div class="v">${money(r.por_metodo.Transferencia)}</div></div>
-    <div class="stat"><div class="k">QR</div><div class="v">${money(r.por_metodo.QR)}</div></div>
-    <div class="stat"><div class="k">Posnet</div><div class="v">${money(r.por_metodo.Posnet)}</div></div>
-    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
+    <div class="summary-grid">
+      <div class="stat stat-total"><div class="k">Total del día</div><div class="v">${money(r.total)}</div></div>
+      <div class="stat"><div class="k">Pedidos</div><div class="v">${r.cantidad}</div></div>
+      <div class="stat"><div class="k"><i class="dot dot-efectivo"></i>Efectivo</div><div class="v">${money(r.por_metodo.Efectivo)}</div></div>
+      <div class="stat"><div class="k"><i class="dot dot-transferencia"></i>Transferencia</div><div class="v">${money(r.por_metodo.Transferencia)}</div></div>
+      <div class="stat"><div class="k"><i class="dot dot-qr"></i>QR</div><div class="v">${money(r.por_metodo.QR)}</div></div>
+      <div class="stat"><div class="k"><i class="dot dot-posnet"></i>Posnet</div><div class="v">${money(r.por_metodo.Posnet)}</div></div>
+    </div>
+    <div class="summary-actions">
       <button class="btn" id="btn-facturar">🧾 Facturar el día</button>
-    </div>
-    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
       <button class="btn ok" id="btn-facturar-todo">✅ Marcar todo como facturado</button>
-    </div>
-    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
       <button class="btn secondary" id="btn-export-dia">⬇ Hoja del día</button>
-    </div>
-    <div class="stat" style="display:flex;align-items:center;justify-content:center;">
-      <button class="btn" id="btn-export">⬇ Excel del mes</button>
+      <span class="export-mes-wrap">
+        <input type="month" id="export-mes" class="inline" title="Mes a exportar" />
+        <button class="btn" id="btn-export">⬇ Excel del mes</button>
+      </span>
     </div>`;
+  $("export-mes").value = state.fecha.slice(0, 7); // default: el mes del día visto
   $("btn-export").addEventListener("click", exportar);
   $("btn-export-dia").addEventListener("click", exportarDia);
   $("btn-facturar").addEventListener("click", openFacturacion);
@@ -974,16 +1024,16 @@ async function loadResumen() {
 // (cierre del día al pasar la lista completa a facturación).
 async function facturarTodo() {
   const pendientes = state.pedidos.filter((p) => !p.anulado && !p.facturado).length;
-  if (!pendientes) return alert("No hay pedidos pendientes de facturar en este día.");
+  if (!pendientes) return toast("No hay pedidos pendientes de facturar en este día.", "info");
   if (!confirm(`¿Marcar como facturados los ${pendientes} pedido(s) pendientes de este día?`)) return;
   const btn = $("btn-facturar-todo");
   btn.disabled = true; btn.textContent = "Marcando…";
   try {
     const r = await api("/api/pedidos/facturar-dia?fecha=" + state.fecha, { method: "POST" });
     await loadDay();
-    alert(`Listo: ${r.facturados} pedido(s) marcados como facturados.`);
+    toast(`Listo: ${r.facturados} pedido(s) marcados como facturados.`, "ok");
   } catch (e) {
-    alert("Error: " + e.message);
+    toast("Error: " + e.message, "error");
     btn.disabled = false; btn.textContent = "✅ Marcar todo como facturado";
   }
 }
@@ -1025,11 +1075,15 @@ $("fact-cerrar").addEventListener("click", () => $("modal-fact").classList.remov
 async function exportar() {
   const btn = $("btn-export"); btn.disabled = true; btn.textContent = "Generando…";
   try {
-    const [y, m] = state.fecha.split("-");
+    // input type=month da "YYYY-MM"; si el navegador no lo soporta y el
+    // valor no tiene esa forma, se cae al mes del día visto.
+    const mesValor = /^\d{4}-\d{2}$/.test($("export-mes")?.value || "")
+      ? $("export-mes").value : state.fecha.slice(0, 7);
+    const [y, m] = mesValor.split("-");
     const res = await api(`/api/export?anio=${+y}&mes=${+m}`, { method: "POST" });
     window.location = res.url;
     btn.textContent = "⬇ Exportar Excel del mes";
-  } catch (e) { alert("Error al exportar: " + e.message); btn.textContent = "⬇ Exportar Excel del mes"; }
+  } catch (e) { toast("Error al exportar: " + e.message, "error"); btn.textContent = "⬇ Exportar Excel del mes"; }
   btn.disabled = false;
 }
 
@@ -1076,22 +1130,22 @@ async function loadCarta() {
 $("btn-nuevo-plato").addEventListener("click", () => openPlatoModal(null));
 $("btn-aumentar").addEventListener("click", async () => {
   const monto = +$("aumento-monto").value;
-  if (!monto) return alert("Ingresá el monto de aumento.");
+  if (!monto) return toast("Ingresá el monto de aumento.", "error");
   if (!confirm(`¿Aumentar TODOS los precios (efectivo y lista) en ${money(monto)}?`)) return;
   const r = await api("/api/platos/aumentar", { method: "POST", body: JSON.stringify({ monto }) });
   $("aumento-monto").value = "";
   await loadCatalog(); loadCarta();
-  alert(`Listo: ${r.actualizados} platos actualizados.`);
+  toast(`Listo: ${r.actualizados} platos actualizados.`, "ok");
 });
 
 async function fijarPrecio(campo, inputId, etiqueta) {
   const valor = +$(inputId).value;
-  if (!valor && valor !== 0) return alert("Ingresá el precio a fijar.");
+  if (!valor && valor !== 0) return toast("Ingresá el precio a fijar.", "error");
   if (!confirm(`¿Poner el precio ${etiqueta} de TODOS los platos en ${money(valor)}?`)) return;
   const r = await api("/api/platos/set-precios", { method: "POST", body: JSON.stringify({ [campo]: valor }) });
   $(inputId).value = "";
   await loadCatalog(); loadCarta();
-  alert(`Listo: ${r.actualizados} platos con precio ${etiqueta} = ${money(valor)}.`);
+  toast(`Listo: ${r.actualizados} platos con precio ${etiqueta} = ${money(valor)}.`, "ok");
 }
 $("btn-set-efectivo").addEventListener("click", () => fijarPrecio("precio_efectivo", "set-efectivo", "efectivo"));
 $("btn-set-lista").addEventListener("click", () => fijarPrecio("precio_lista", "set-lista", "de lista"));
@@ -1116,7 +1170,7 @@ $("mp-save").addEventListener("click", async () => {
     precio_lista: +$("mp-li").value || 0,
     activo: $("mp-activo").checked,
   };
-  if (!body.nombre) return alert("El nombre es obligatorio.");
+  if (!body.nombre) return toast("El nombre es obligatorio.", "error");
   if (id) await api(`/api/platos/${id}`, { method: "PUT", body: JSON.stringify(body) });
   else await api("/api/platos", { method: "POST", body: JSON.stringify(body) });
   $("modal-plato").classList.remove("show");
@@ -1146,6 +1200,37 @@ $("btn-guardar-config").addEventListener("click", async () => {
   $("config-ok").textContent = "✓ Guardado";
   setTimeout(() => ($("config-ok").textContent = ""), 2000);
 });
+
+// ----------------------------------------------------- cierre de modales
+// Cada modal cierra por su botón existente (así se preservan los callbacks
+// encadenados, ej. repartidores → plato del día al arrancar).
+const MODAL_CERRAR = {
+  "modal-rep": "rep-cancel",
+  "modal-pdd": "pdd-cancel",
+  "modal-fact": "fact-cerrar",
+  "modal-ticket": "ticket-cerrar",
+  "modal-rutas": "rutas-cerrar",
+  "modal-plato": "mp-cancel",
+};
+// Sólo los modales sin campos editables cierran con click afuera (un click
+// accidental no puede hacer perder lo tipeado en los de formulario).
+const MODALES_SOLO_LECTURA = new Set(["modal-fact", "modal-ticket", "modal-rutas"]);
+
+function cerrarModal(back) { $(MODAL_CERRAR[back.id])?.click(); }
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("ac-cliente").classList.contains("hidden")) return; // lo usa el autocompletado
+  const abierto = document.querySelector(".modal-back.show");
+  if (abierto) { e.preventDefault(); cerrarModal(abierto); }
+});
+// mousedown y no click: un drag que empieza dentro del modal y suelta afuera
+// dispararía click en el fondo y cerraría sin querer.
+document.querySelectorAll(".modal-back").forEach((back) =>
+  back.addEventListener("mousedown", (e) => {
+    if (e.target === back && MODALES_SOLO_LECTURA.has(back.id)) cerrarModal(back);
+  })
+);
 
 // -------------------------------------------------------------- utilidades
 function escapeHtml(s) {

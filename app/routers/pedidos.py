@@ -121,7 +121,7 @@ def crear(data: PedidoIn, db: Session = Depends(get_db)):
     return pedido
 
 
-@router.patch("/{pedido_id}", response_model=PedidoOut)
+@router.patch("/{pedido_id}")
 def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     pedido = db.get(Pedido, pedido_id)
     if not pedido:
@@ -146,7 +146,8 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     pedido.total = calcular_total(pedido)
     db.commit()
     db.refresh(pedido)
-    return pedido
+    # Con las banderas de alerta: el frontend actualiza la fila sin recargar.
+    return _serializar(db, pedido)
 
 
 @router.post("/facturar-dia")
@@ -172,7 +173,7 @@ def facturar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
     return {"fecha": fecha.isoformat(), "facturados": len(pendientes)}
 
 
-@router.post("/{pedido_id}/anular", response_model=PedidoOut)
+@router.post("/{pedido_id}/anular")
 def anular(pedido_id: int, db: Session = Depends(get_db)):
     """Anula (no borra): queda visible pero no suma ni alerta."""
     pedido = db.get(Pedido, pedido_id)
@@ -181,10 +182,10 @@ def anular(pedido_id: int, db: Session = Depends(get_db)):
     pedido.anulado = True
     db.commit()
     db.refresh(pedido)
-    return pedido
+    return _serializar(db, pedido)
 
 
-@router.post("/{pedido_id}/restaurar", response_model=PedidoOut)
+@router.post("/{pedido_id}/restaurar")
 def restaurar(pedido_id: int, db: Session = Depends(get_db)):
     pedido = db.get(Pedido, pedido_id)
     if not pedido:
@@ -192,7 +193,7 @@ def restaurar(pedido_id: int, db: Session = Depends(get_db)):
     pedido.anulado = False
     db.commit()
     db.refresh(pedido)
-    return pedido
+    return _serializar(db, pedido)
 
 
 @router.delete("/{pedido_id}", status_code=204)
