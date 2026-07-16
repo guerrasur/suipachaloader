@@ -258,6 +258,7 @@ function toggleEnvio() {
 }
 function toggleVuelto() {
   $("wrap-vuelto").style.display = $("f-pago").value === "Efectivo" ? "" : "none";
+  $("f-pago").className = "select-pago " + pagoClase($("f-pago").value);
 }
 function toggleVentanilla() {
   // Ventanilla: sin dirección/indicaciones/repartidor.
