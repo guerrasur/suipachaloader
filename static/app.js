@@ -3,6 +3,24 @@
 // ------------------------------------------------------------------ helpers
 const $ = (id) => document.getElementById(id);
 const money = (n) => "$" + (Math.round(n || 0)).toLocaleString("es-AR");
+
+// Calcula el vuelto a partir del texto libre de "paga con" (ej. "40000", "Justo").
+// Devuelve null si el texto no permite calcular nada (vacío o sin dígitos ni "justo").
+function calcularVuelto(detalle, total) {
+  if (!detalle) return null;
+  const t = detalle.trim().toLowerCase();
+  if (t === "justo" || t === "exacto") return 0;
+  const digits = detalle.replace(/\D/g, "");
+  if (!digits) return null;
+  return parseInt(digits, 10) - total;
+}
+
+// Texto " → Vuelto $X" para mostrar junto al detalle de pago en efectivo.
+function vueltoSufijo(p) {
+  const vuelto = calcularVuelto(p.pago_efectivo_detalle, p.total);
+  if (vuelto === null || vuelto <= 0) return "";
+  return ` → Vuelto ${money(vuelto)}`;
+}
 const todayISO = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
 
 async function api(url, opts) {
@@ -189,17 +207,33 @@ function montoDescuento(sub) {
   if (!tipo || !val) return 0;
   return tipo === "porcentaje" ? sub * val / 100 : val;
 }
+let currentTotal = 0;
 function recalc() {
   const sub = subtotalItems();
-  const total = Math.max(0, sub + montoEnvio() - montoDescuento(sub));
-  $("f-total").textContent = money(total);
+  currentTotal = Math.max(0, sub + montoEnvio() - montoDescuento(sub));
+  $("f-total").textContent = money(currentTotal);
+  updateVueltoCalc();
+}
+
+function updateVueltoCalc() {
+  const hint = $("f-vuelto-calc");
+  if ($("f-pago").value !== "Efectivo") { hint.textContent = ""; return; }
+  const vuelto = calcularVuelto($("f-vuelto").value, currentTotal);
+  if (vuelto === null) { hint.textContent = ""; return; }
+  hint.textContent = vuelto < 0
+    ? `Falta ${money(-vuelto)}`
+    : vuelto === 0
+      ? "Sin vuelto (paga justo)"
+      : `Vuelto para el repartidor: ${money(vuelto)}`;
+  hint.style.color = vuelto < 0 ? "var(--danger)" : "";
 }
 
 // ------------------------------------------------------------- form wiring
 ["f-tipo", "f-no-envio", "f-envio", "f-desc-tipo", "f-desc-valor"].forEach((id) =>
   $(id).addEventListener("input", () => { toggleEnvio(); recalc(); })
 );
-$("f-pago").addEventListener("change", () => { toggleVuelto(); reapplyPrices(); });
+$("f-vuelto").addEventListener("input", updateVueltoCalc);
+$("f-pago").addEventListener("change", () => { toggleVuelto(); reapplyPrices(); recalc(); });
 $("add-item").addEventListener("click", () => addItem(false));
 $("add-pdd").addEventListener("click", () => addItem(true));
 $("btn-cancelar").addEventListener("click", resetForm);
@@ -658,7 +692,7 @@ function renderTabla() {
       <td>${escapeHtml(p.cliente_direccion)}</td>
       <td>${items}</td>
       <td class="right nowrap">${money(p.total)}</td>
-      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + "</small>" : ""}
+      <td class="nowrap"><span class="pago-pill ${pagoClase(p.metodo_pago)}">${escapeHtml(p.metodo_pago)}</span>${p.pago_efectivo_detalle ? "<br><small class='muted'>" + escapeHtml(p.pago_efectivo_detalle) + vueltoSufijo(p) + "</small>" : ""}
         <br><button class="btn sm r-pagado ${p.pagado ? "pagado-si" : "pagado-no"}" ${p.anulado ? "disabled" : ""} title="${p.pagado ? "Marcar como NO pagado" : "Marcar como pagado"}">${p.pagado ? "✔ Pagado" : "$ Sin pagar"}</button></td>
       <td>${repartidorSelectHtml(p)}</td>
       <td class="nowrap">${p.hora_salida
@@ -820,9 +854,15 @@ function drawTicket(p) {
     ctx.fillText(`Cobrar: ${money(p.total)}`, W / 2, y);
     y += 60;
     if (p.pago_efectivo_detalle) {
+      const vuelto = calcularVuelto(p.pago_efectivo_detalle, p.total);
+      const texto = vuelto === null
+        ? "Cambio: " + p.pago_efectivo_detalle
+        : vuelto > 0
+          ? `Paga con ${p.pago_efectivo_detalle} → Vuelto: ${money(vuelto)}`
+          : "Sin vuelto (paga justo)";
       ctx.fillStyle = "#111";
       ctx.font = "bold 38px Arial, sans-serif";
-      for (const l of wrapText(ctx, "Cambio: " + p.pago_efectivo_detalle, W - 100)) {
+      for (const l of wrapText(ctx, texto, W - 100)) {
         ctx.fillText(l, W / 2, y);
         y += 48;
       }
