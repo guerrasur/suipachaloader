@@ -151,20 +151,24 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
 
 
 @router.post("/facturar-dia")
-def facturar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
+def facturar_dia(
+    fecha: date | None = None,
+    metodo_pago: str | None = None,
+    db: Session = Depends(get_db),
+):
     """Marca como facturados todos los pedidos válidos (no anulados) de la
     fecha que todavía no lo estén. Sirve para el cierre del día al pasar la
-    lista completa a facturación de una sola vez."""
+    lista completa a facturación de una sola vez, o para cerrar un solo
+    método de pago por separado (efectivo y transferencia no se mezclan)."""
     fecha = fecha or date.today()
-    pendientes = (
-        db.query(Pedido)
-        .filter(
-            Pedido.fecha == fecha,
-            Pedido.anulado.is_(False),
-            Pedido.facturado.is_(False),
-        )
-        .all()
-    )
+    filtros = [
+        Pedido.fecha == fecha,
+        Pedido.anulado.is_(False),
+        Pedido.facturado.is_(False),
+    ]
+    if metodo_pago:
+        filtros.append(Pedido.metodo_pago == metodo_pago)
+    pendientes = db.query(Pedido).filter(*filtros).all()
     ahora = datetime.now()
     for p in pendientes:
         p.facturado = True

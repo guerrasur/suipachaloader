@@ -330,6 +330,14 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .fact-list li.fact-envio { color: var(--warn); }
 .fact-list li.fact-envio b { color: var(--warn); }
 .fact-foot { display: flex; justify-content: space-between; padding: .5rem .8rem; border-top: 1px solid var(--line); font-weight: 700; background: #f0f2f5; }
+.fact-actions { padding: .6rem .8rem; border-top: 1px solid var(--line); text-align: center; }
+.fact-actions .btn { width: 100%; }
+/* Columna ya facturada por completo: se apaga visualmente para distinguirla
+   de un vistazo de las que todavía faltan cerrar. */
+.fact-col-done { opacity: .55; background: #eef0f2; }
+.fact-col-done .fact-head { background: var(--muted); }
+.fact-col-done .fact-list li,
+.fact-col-done .fact-foot span:first-child { text-decoration: line-through; }
 
 /* --------------------------------------------------------------- daynav */
 .daynav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

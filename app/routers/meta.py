@@ -87,13 +87,15 @@ def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
 
     def bucket(metodo: str) -> dict:
         return acum.setdefault(
-            metodo, {"items": {}, "envios": 0, "pedidos": 0, "total": 0.0}
+            metodo, {"items": {}, "envios": 0, "pedidos": 0, "facturados": 0, "total": 0.0}
         )
 
     for p in pedidos:
         b = bucket(p.metodo_pago)
         b["pedidos"] += 1
         b["total"] += p.total
+        if p.facturado:
+            b["facturados"] += 1
         # Un envío = un pedido de tipo "Envío" (más allá de si se cobró o no).
         if p.tipo == "Envío":
             b["envios"] += 1
@@ -114,6 +116,7 @@ def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
             "items": items,
             "envios": b["envios"],
             "pedidos": b["pedidos"],
+            "facturados": b["facturados"],
             "total": round(b["total"], 2),
         }
 
