@@ -1055,24 +1055,49 @@ async function openFacturacion() {
   } else {
     cont.innerHTML = r.metodos.map((m) => {
       const d = r.por_metodo[m];
+      const completo = d.pedidos > 0 && d.facturados === d.pedidos;
       const filas = d.items.map((it) =>
         `<li><b>${it.cantidad}</b> ${escapeHtml(it.nombre)}</li>`).join("");
       const envios = d.envios > 0
         ? `<li class="fact-envio"><b>${d.envios}</b> ${d.envios === 1 ? "envío" : "envíos"}</li>` : "";
       return `
-        <div class="fact-col">
+        <div class="fact-col ${completo ? "fact-col-done" : ""}">
           <div class="fact-head">${escapeHtml(m)}</div>
           <ul class="fact-list">${filas}${envios}</ul>
           <div class="fact-foot">
-            <span>${d.pedidos} pedido${d.pedidos === 1 ? "" : "s"}</span>
+            <span>${d.facturados}/${d.pedidos} facturado${d.pedidos === 1 ? "" : "s"}</span>
             <span>${money(d.total)}</span>
+          </div>
+          <div class="fact-actions">
+            <button type="button" class="btn ${completo ? "secondary" : "ok"} sm fact-marcar" data-metodo="${escapeHtml(m)}" ${completo ? "disabled" : ""}>
+              ${completo ? "✅ Ya facturado" : "✅ Marcar facturado"}
+            </button>
           </div>
         </div>`;
     }).join("");
+    cont.querySelectorAll(".fact-marcar").forEach((btn) => {
+      btn.addEventListener("click", () => facturarMetodo(btn.dataset.metodo));
+    });
   }
   $("modal-fact").classList.add("show");
 }
 $("fact-cerrar").addEventListener("click", () => $("modal-fact").classList.remove("show"));
+
+// Factura solo los pedidos de un método de pago (no se mezclan efectivo y
+// transferencia al pasar la lista al sistema de facturación).
+async function facturarMetodo(metodo) {
+  try {
+    const r = await api(
+      "/api/pedidos/facturar-dia?fecha=" + state.fecha + "&metodo_pago=" + encodeURIComponent(metodo),
+      { method: "POST" }
+    );
+    await loadDay();
+    await openFacturacion();
+    toast(`Listo: ${r.facturados} pedido(s) de ${metodo} marcados como facturados.`, "ok");
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  }
+}
 
 async function exportar() {
   const btn = $("btn-export"); btn.disabled = true; btn.textContent = "Generando…";
