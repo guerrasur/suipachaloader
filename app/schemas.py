@@ -215,3 +215,4 @@ class ConfigIn(BaseModel):
     costo_envio_default: float | None = None
     direccion_local: str | None = None
     ciudad_default: str | None = None
+    nombre_local: str | None = None

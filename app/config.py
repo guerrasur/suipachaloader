@@ -20,6 +20,9 @@ DEFAULTS: dict[str, str] = {
     # Ciudad/zona que se agrega a las direcciones al geocodificar si no la
     # incluyen ya (ej. "Suipacha, Buenos Aires, Argentina").
     "ciudad_default": "",
+    # Nombre de este local (por PC/instalación). Se pregunta una sola vez al
+    # arrancar y se usa en el título de la app y en los nombres de los Excel.
+    "nombre_local": "",
 }
 
 
