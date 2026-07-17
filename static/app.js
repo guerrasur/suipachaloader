@@ -941,6 +941,9 @@ function openTicket(p) {
   const conDireccion = !!(p.cliente_direccion || "").trim();
   $("ticket-maps").style.display = conDireccion ? "" : "none";
   if (conDireccion) $("ticket-maps").href = googleMapsSearchLink(p.cliente_direccion);
+  const conRepartidor = p.tipo === "Envío" && !!(p.repartidor || "").trim();
+  $("ticket-ruta").style.display = conRepartidor ? "" : "none";
+  $("ticket-ruta").textContent = "🗺️ Ruta optimizada";
   $("ticket-copiar").textContent = "📋 Copiar imagen";
   $("ticket-contacto").textContent = "👤 Copiar contacto";
   $("modal-ticket").classList.add("show");
@@ -984,6 +987,23 @@ $("ticket-contacto").addEventListener("click", async () => {
     $("ticket-contacto").textContent = "✅ Contacto copiado";
   } catch (e) {
     toast("No se pudo copiar el contacto al portapapeles.", "error");
+  }
+});
+
+$("ticket-ruta").addEventListener("click", async () => {
+  const p = _ticketPedido;
+  if (!p || !p.repartidor) return;
+  const btn = $("ticket-ruta");
+  btn.textContent = "Calculando…";
+  try {
+    const r = await api(
+      `/api/rutas/repartidor?fecha=${state.fecha}&repartidor=${encodeURIComponent(p.repartidor)}`
+    );
+    await navigator.clipboard.writeText(`Ruta Optimizada: ${r.maps_link}`);
+    btn.textContent = "✅ Ruta copiada";
+  } catch (e) {
+    toast(e.message, "error");
+    btn.textContent = "🗺️ Ruta optimizada";
   }
 });
 
