@@ -1303,8 +1303,39 @@ function pagoClase(metodo) {
 // ese formato exacto; no sirve toLocaleTimeString (devuelve "09:15 a. m.").
 function hhmm(iso) { return iso ? String(iso).slice(11, 16) : ""; }
 
+// ------------------------------------------------------ nombre del local
+// Preferencia por dispositivo (no por instalación): se guarda en localStorage,
+// no en la base, así cada PC del mostrador puede tener su propio nombre.
+const LOCAL_NAME_KEY = "nombreLocal";
+function aplicarNombreLocal() {
+  const nombre = localStorage.getItem(LOCAL_NAME_KEY);
+  $("local-name").textContent = nombre ? nombre + " - " : "";
+}
+function pedirNombreLocalSiFalta() {
+  return new Promise((resolve) => {
+    if (localStorage.getItem(LOCAL_NAME_KEY)) return resolve();
+    $("modal-local").classList.add("show");
+    setTimeout(() => $("input-nombre-local").focus(), 0);
+    const onSave = () => {
+      const nombre = $("input-nombre-local").value.trim();
+      if (!nombre) return; // obligatorio: no cierra hasta tener un nombre
+      localStorage.setItem(LOCAL_NAME_KEY, nombre);
+      aplicarNombreLocal();
+      $("modal-local").classList.remove("show");
+      $("local-guardar").removeEventListener("click", onSave);
+      $("input-nombre-local").removeEventListener("keydown", onKey);
+      resolve();
+    };
+    const onKey = (e) => { if (e.key === "Enter") onSave(); };
+    $("local-guardar").addEventListener("click", onSave);
+    $("input-nombre-local").addEventListener("keydown", onKey);
+  });
+}
+aplicarNombreLocal();
+
 // ------------------------------------------------------------------- init
 (async function init() {
+  await pedirNombreLocalSiFalta();
   await loadCatalog();
   await getConfigCached();
   $("f-envio").value = _cfgCache.costo_envio_default;
