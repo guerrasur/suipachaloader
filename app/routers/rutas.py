@@ -90,3 +90,58 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
             for p in sin_geocodificar
         ],
     }
+
+
+@router.get("/repartidor")
+def optimizar_repartidor(repartidor: str, fecha: date | None = None, db: Session = Depends(get_db)):
+    """Ruta optimizada para los pedidos ya asignados a mano a un repartidor
+    (a diferencia de `/api/rutas`, no reagrupa: toma tal cual lo que cada
+    pedido tiene cargado en `repartidor`)."""
+    fecha = fecha or date.today()
+    repartidor = repartidor.strip()
+    if not repartidor:
+        raise HTTPException(400, "Falta el repartidor.")
+
+    pedidos = (
+        db.query(Pedido)
+        .filter(
+            Pedido.fecha == fecha,
+            Pedido.tipo == "Envío",
+            Pedido.anulado.is_(False),
+            Pedido.hora_salida.is_(None),
+            Pedido.repartidor == repartidor,
+        )
+        .order_by(Pedido.hora_pedido)
+        .all()
+    )
+    if len(pedidos) < 2:
+        raise HTTPException(400, f"{repartidor} tiene menos de 2 pedidos pendientes hoy.")
+
+    ciudad_default = cfg.get_value(db, "ciudad_default")
+    direccion_local = cfg.get_value(db, "direccion_local")
+
+    ubicados: list[Pedido] = []
+    coords: list[tuple[float, float]] = []
+    sin_geocodificar: list[Pedido] = []
+    for p in pedidos:
+        punto = geocode(db, p.cliente_direccion, ciudad_default)
+        if punto is None:
+            sin_geocodificar.append(p)
+        else:
+            ubicados.append(p)
+            coords.append(punto)
+
+    if len(ubicados) < 2:
+        raise HTTPException(400, "No se pudieron ubicar suficientes direcciones para armar la ruta.")
+
+    origen = geocode(db, direccion_local, ciudad_default) if direccion_local else None
+    orden = ordenar_ruta(origen, coords)
+    pedidos_en_orden = [ubicados[i] for i in orden]
+    direcciones = [p.cliente_direccion for p in pedidos_en_orden]
+
+    return {
+        "repartidor": repartidor,
+        "maps_link": google_maps_route_link(direccion_local, direcciones),
+        "pedidos": [{"id": p.id, "numero": p.numero} for p in pedidos_en_orden],
+        "sin_geocodificar": [{"id": p.id, "numero": p.numero} for p in sin_geocodificar],
+    }
