@@ -933,7 +933,9 @@ function openTicket(p) {
   $("ticket-title").textContent = `Ticket pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}`;
   drawTicket(p);
   const conTel = !!(p.cliente_telefono || "").trim();
-  $("ticket-contacto").style.display = conTel ? "" : "none";
+  const conNombre = !!(p.cliente_nombre || "").trim();
+  const conDireccionTexto = !!(p.cliente_direccion || "").trim();
+  $("ticket-contacto").style.display = conTel || conNombre || conDireccionTexto ? "" : "none";
   $("ticket-wa").style.display = conTel ? "" : "none";
   if (conTel) $("ticket-wa").href = "https://wa.me/" + telefonoWa(p.cliente_telefono);
   const conDireccion = !!(p.cliente_direccion || "").trim();
@@ -973,7 +975,7 @@ $("ticket-contacto").addEventListener("click", async () => {
   if (!p) return;
   const texto = [
     p.cliente_nombre,
-    "Tel: " + p.cliente_telefono,
+    p.cliente_telefono ? "Tel: " + p.cliente_telefono : "",
     p.cliente_direccion,
     p.cliente_direccion ? googleMapsSearchLink(p.cliente_direccion) : "",
   ].filter(Boolean).join("\n");
