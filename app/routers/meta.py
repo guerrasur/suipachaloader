@@ -24,6 +24,10 @@ router = APIRouter(prefix="/api", tags=["meta"])
 _VERSION_PATH = Path(__file__).resolve().parent.parent.parent / "VERSION"
 
 
+def _nombre_local(db: Session) -> str:
+    return cfg.get_value(db, "nombre_local").strip() or "Suipacha"
+
+
 @router.get("/version")
 def version():
     try:
@@ -224,17 +228,19 @@ def exportar(anio: int | None = None, mes: int | None = None, db: Session = Depe
     hoy = date.today()
     anio = anio or hoy.year
     mes = mes or hoy.month
-    ruta = exportar_mes(db, anio, mes)
+    nombre_local = _nombre_local(db)
+    ruta = exportar_mes(db, anio, mes, nombre_local)
     return {"ok": True, "archivo": ruta.name, "url": f"/api/export/descargar?anio={anio}&mes={mes}"}
 
 
 @router.get("/export/descargar")
 def descargar(anio: int, mes: int, db: Session = Depends(get_db)):
-    ruta = exportar_mes(db, anio, mes)
+    nombre_local = _nombre_local(db)
+    ruta = exportar_mes(db, anio, mes, nombre_local)
     return FileResponse(
         ruta,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=nombre_archivo(anio, mes),
+        filename=nombre_archivo(anio, mes, nombre_local),
     )
 
 
@@ -242,9 +248,10 @@ def descargar(anio: int, mes: int, db: Session = Depends(get_db)):
 @router.get("/export/dia")
 def descargar_dia(fecha: date | None = None, db: Session = Depends(get_db)):
     fecha = fecha or date.today()
-    ruta = exportar_dia(db, fecha)
+    nombre_local = _nombre_local(db)
+    ruta = exportar_dia(db, fecha, nombre_local)
     return FileResponse(
         ruta,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=nombre_archivo_dia(fecha),
+        filename=nombre_archivo_dia(fecha, nombre_local),
     )

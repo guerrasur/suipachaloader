@@ -1230,6 +1230,7 @@ $("mp-save").addEventListener("click", async () => {
 // ------------------------------------------------------------------ config
 async function loadConfig() {
   _cfgCache = await api("/api/config");
+  $("c-nombre-local").value = _cfgCache.nombre_local || "";
   $("c-demora").value = _cfgCache.minutos_demora_salida;
   $("c-sinfact").value = _cfgCache.hora_alerta_sin_facturar;
   $("c-limite").value = _cfgCache.hora_limite_pedidos;
@@ -1239,6 +1240,7 @@ async function loadConfig() {
 }
 $("btn-guardar-config").addEventListener("click", async () => {
   const body = {
+    nombre_local: $("c-nombre-local").value.trim(),
     minutos_demora_salida: +$("c-demora").value,
     hora_alerta_sin_facturar: $("c-sinfact").value.trim(),
     hora_limite_pedidos: $("c-limite").value.trim(),
@@ -1247,6 +1249,7 @@ $("btn-guardar-config").addEventListener("click", async () => {
     ciudad_default: $("c-ciudad-default").value.trim(),
   };
   _cfgCache = await api("/api/config", { method: "PUT", body: JSON.stringify(body) });
+  aplicarNombreLocal(_cfgCache.nombre_local);
   $("config-ok").textContent = "✓ Guardado";
   setTimeout(() => ($("config-ok").textContent = ""), 2000);
 });
@@ -1303,10 +1306,41 @@ function pagoClase(metodo) {
 // ese formato exacto; no sirve toLocaleTimeString (devuelve "09:15 a. m.").
 function hhmm(iso) { return iso ? String(iso).slice(11, 16) : ""; }
 
+// ------------------------------------------------------ nombre del local
+// Se pregunta una sola vez por instalación y se guarda en la config del
+// backend (no en localStorage): así lo usan tanto el título de la app como
+// los nombres de archivo/hoja de los Excel exportados, que se generan en el
+// servidor y no tienen acceso al localStorage del navegador.
+function aplicarNombreLocal(nombre) {
+  $("local-name").textContent = nombre ? nombre + " - " : "";
+}
+function pedirNombreLocalSiFalta() {
+  return new Promise((resolve) => {
+    if (_cfgCache.nombre_local) return resolve();
+    $("modal-local").classList.add("show");
+    setTimeout(() => $("input-nombre-local").focus(), 0);
+    const onSave = async () => {
+      const nombre = $("input-nombre-local").value.trim();
+      if (!nombre) return; // obligatorio: no cierra hasta tener un nombre
+      _cfgCache = await api("/api/config", { method: "PUT", body: JSON.stringify({ nombre_local: nombre }) });
+      aplicarNombreLocal(_cfgCache.nombre_local);
+      $("modal-local").classList.remove("show");
+      $("local-guardar").removeEventListener("click", onSave);
+      $("input-nombre-local").removeEventListener("keydown", onKey);
+      resolve();
+    };
+    const onKey = (e) => { if (e.key === "Enter") onSave(); };
+    $("local-guardar").addEventListener("click", onSave);
+    $("input-nombre-local").addEventListener("keydown", onKey);
+  });
+}
+
 // ------------------------------------------------------------------- init
 (async function init() {
-  await loadCatalog();
   await getConfigCached();
+  aplicarNombreLocal(_cfgCache.nombre_local);
+  await pedirNombreLocalSiFalta();
+  await loadCatalog();
   $("f-envio").value = _cfgCache.costo_envio_default;
   resetForm();
   await loadDay();

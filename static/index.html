@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>🥗 Suipacha Loader <span class="app-version" id="app-version"></span></h1>
+    <h1>🥗 <span id="local-name"></span>Suipacha Loader <span class="app-version" id="app-version"></span></h1>
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Pedidos</button>
       <button data-tab="carta">Carta</button>
@@ -235,6 +235,10 @@
       <div class="card" style="max-width:520px;">
         <h2>Configuración</h2>
         <div class="field" style="margin-bottom:.6rem;">
+          <label>Nombre del local (aparece en el título y en los Excel)</label>
+          <input id="c-nombre-local" placeholder="Ej: Retiro" />
+        </div>
+        <div class="field" style="margin-bottom:.6rem;">
           <label>Minutos de demora para alerta de salida</label>
           <input type="number" id="c-demora" />
         </div>
@@ -263,6 +267,21 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal nombre del local (una sola vez por dispositivo) -->
+  <div class="modal-back" id="modal-local">
+    <div class="modal">
+      <h2>Nombre del local</h2>
+      <p class="muted" style="font-size:.85rem;">¿Cómo se llama este local? Aparece en el título de la app y en los nombres de los Excel exportados (por ejemplo "Retiro").</p>
+      <div class="field" style="margin-bottom:1rem;">
+        <label>Nombre</label>
+        <input id="input-nombre-local" placeholder="Ej: Retiro" autocomplete="off" />
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn" id="local-guardar">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal repartidores del día -->
   <div class="modal-back" id="modal-rep">

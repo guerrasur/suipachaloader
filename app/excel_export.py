@@ -1,7 +1,9 @@
 """Exportación a Excel mensual con openpyxl.
 
-- Un archivo por mes: ``Suipacha_Pedidos_-_<Mes>_<Año>.xlsx``.
-- Una hoja por día, nombrada ``Suipacha- DDMM``.
+- Un archivo por mes: ``<nombre_local>_Pedidos_-_<Mes>_<Año>.xlsx``.
+- Una hoja por día, nombrada ``<nombre_local>- DDMM``.
+- ``nombre_local`` sale de la config (``nombre_local``, elegido al arrancar
+  la app); si está vacío se usa "Suipacha" como valor por defecto.
 - Si la hoja del día ya existe se **regenera completa** desde la BD (se borra
   y se reescribe), nunca se duplica ni se parchea.
 - Los pedidos anulados aparecen marcados como ``ANULADO`` y no suman.
@@ -65,26 +67,27 @@ _FACT_SI = (PatternFill("solid", fgColor="D6F0DE"), Font(bold=True, color="1F8A4
 _FACT_NO = (PatternFill("solid", fgColor="FDE3E0"), Font(bold=True, color="C0392B"))
 
 
-def nombre_archivo(anio: int, mes: int) -> str:
-    return f"Suipacha_Pedidos_-_{MESES[mes]}_{anio}.xlsx"
+def nombre_archivo(anio: int, mes: int, nombre_local: str = "Suipacha") -> str:
+    return f"{nombre_local}_Pedidos_-_{MESES[mes]}_{anio}.xlsx"
 
 
-def nombre_hoja(d: date) -> str:
-    return f"Suipacha- {d.strftime('%d%m')}"
+def nombre_hoja(d: date, nombre_local: str = "Suipacha") -> str:
+    # Los nombres de hoja de Excel están limitados a 31 caracteres.
+    return f"{nombre_local[:25]}- {d.strftime('%d%m')}"
 
 
-def nombre_archivo_dia(d: date) -> str:
-    return f"Suipacha_{d.strftime('%d-%m-%Y')}.xlsx"
+def nombre_archivo_dia(d: date, nombre_local: str = "Suipacha") -> str:
+    return f"{nombre_local}_{d.strftime('%d-%m-%Y')}.xlsx"
 
 
 def _items_texto(p: Pedido) -> str:
     return "\n".join(f"{i.cantidad}x {i.nombre}" for i in p.items)
 
 
-def exportar_mes(db: Session, anio: int, mes: int) -> Path:
+def exportar_mes(db: Session, anio: int, mes: int, nombre_local: str = "Suipacha") -> Path:
     """Genera/actualiza el archivo del mes. Devuelve la ruta al .xlsx."""
     EXPORT_DIR.mkdir(exist_ok=True)
-    ruta = EXPORT_DIR / nombre_archivo(anio, mes)
+    ruta = EXPORT_DIR / nombre_archivo(anio, mes, nombre_local)
 
     if ruta.exists():
         wb = load_workbook(ruta)
@@ -105,7 +108,7 @@ def exportar_mes(db: Session, anio: int, mes: int) -> Path:
         por_dia.setdefault(p.fecha, []).append(p)
 
     for d in sorted(por_dia):
-        _regenerar_hoja(wb, d, por_dia[d])
+        _regenerar_hoja(wb, d, por_dia[d], nombre_local)
 
     # Ordenar las hojas por fecha para que queden prolijas.
     wb._sheets.sort(key=lambda ws: ws.title)
@@ -113,12 +116,12 @@ def exportar_mes(db: Session, anio: int, mes: int) -> Path:
     return ruta
 
 
-def exportar_dia(db: Session, d: date) -> Path:
+def exportar_dia(db: Session, d: date, nombre_local: str = "Suipacha") -> Path:
     """Genera un archivo con SOLO la hoja de ese día (misma hoja que en el
-    mensual, ``Suipacha- DDMM``). Sirve para cargar/pegar esa hoja al final
-    del día dentro del Excel del mes que junta todos los días."""
+    mensual, ``<nombre_local>- DDMM``). Sirve para cargar/pegar esa hoja al
+    final del día dentro del Excel del mes que junta todos los días."""
     EXPORT_DIR.mkdir(exist_ok=True)
-    ruta = EXPORT_DIR / nombre_archivo_dia(d)
+    ruta = EXPORT_DIR / nombre_archivo_dia(d, nombre_local)
 
     pedidos = (
         db.query(Pedido)
@@ -129,13 +132,13 @@ def exportar_dia(db: Session, d: date) -> Path:
 
     wb = Workbook()
     wb.remove(wb.active)  # sacamos la hoja vacía por defecto
-    _regenerar_hoja(wb, d, pedidos)
+    _regenerar_hoja(wb, d, pedidos, nombre_local)
     wb.save(ruta)
     return ruta
 
 
-def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
-    titulo = nombre_hoja(d)
+def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido], nombre_local: str = "Suipacha") -> None:
+    titulo = nombre_hoja(d, nombre_local)
     if titulo in wb.sheetnames:
         del wb[titulo]  # borrar y reescribir: nunca parchear
     ws = wb.create_sheet(titulo)
@@ -146,7 +149,7 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido]) -> None:
 
     # Título (banda de color, texto blanco centrado — como la planilla).
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(COLUMNAS))
-    tcell = ws.cell(row=1, column=1, value=f"Suipacha — Pedidos {d.strftime('%d/%m/%Y')}")
+    tcell = ws.cell(row=1, column=1, value=f"{nombre_local} — Pedidos {d.strftime('%d/%m/%Y')}")
     tcell.font = _TITLE_FONT
     tcell.fill = _TITLE_FILL
     tcell.alignment = Alignment(horizontal="center", vertical="center")
