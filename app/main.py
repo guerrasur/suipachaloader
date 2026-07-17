@@ -90,6 +90,19 @@ app.include_router(meta.router)
 app.include_router(rutas.router)
 
 
+@app.middleware("http")
+async def sin_cacheo_heuristico(request, call_next):
+    # Sin Cache-Control el navegador aplica cacheo heurístico (RFC 7234) y
+    # puede servir estáticos viejos ante un F5 normal después de actualizar
+    # (el updater preserva el mtime del zip vía shutil.copy2, así que
+    # Last-Modified no ayuda a invalidar). Forzamos revalidación siempre;
+    # sigue siendo barato porque FastAPI responde 304 con el ETag si no
+    # cambió nada.
+    response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
