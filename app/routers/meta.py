@@ -100,8 +100,10 @@ def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
         b["total"] += p.total
         if p.facturado:
             b["facturados"] += 1
-        # Un envío = un pedido de tipo "Envío" (más allá de si se cobró o no).
-        if p.tipo == "Envío":
+        # Envío facturable: tipo "Envío" que efectivamente se cobra. Los
+        # marcados "no cobrar envío" no se facturan, así que no se cuentan
+        # (si no, al facturar se les sumaba igual el costo del envío).
+        if p.tipo == "Envío" and not p.no_cobrar_envio:
             b["envios"] += 1
         for it in p.items:
             nombre = (it.nombre or "").strip() or "(sin nombre)"

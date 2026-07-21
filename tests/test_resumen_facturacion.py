@@ -44,3 +44,19 @@ def test_facturacion_items_y_envios(client):
     assert ef["items"] == [{"nombre": "Milanesa", "cantidad": 2}]
     assert ef["total"] == 23000
     assert r["por_metodo"]["Transferencia"]["total"] == 12000
+
+
+def test_facturacion_no_cuenta_envio_gratis(client):
+    # Envío con costo pero marcado "no se cobra": no se factura el envío ni
+    # su costo entra en el total.
+    _crear(
+        client, "Efectivo", 10000,
+        tipo="Envío", costo_envio=3000, no_cobrar_envio=True,
+    )
+    # Envío normal cobrado, para contrastar.
+    _crear(client, "Efectivo", 10000, tipo="Envío", costo_envio=3000)
+
+    ef = client.get(f"/api/facturacion?fecha={FECHA}").json()["por_metodo"]["Efectivo"]
+    assert ef["pedidos"] == 2
+    assert ef["envios"] == 1          # sólo el cobrado
+    assert ef["total"] == 23000       # 10000 + (10000 + 3000)
