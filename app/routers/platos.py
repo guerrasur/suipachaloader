@@ -55,9 +55,14 @@ def dar_de_baja(plato_id: int, db: Session = Depends(get_db)):
 def aumentar_todos(data: AumentoIn, db: Session = Depends(get_db)):
     """Suma el mismo monto a ambos precios de todos los platos activos.
 
-    Los pedidos ya cargados conservan su precio (se guarda por ítem).
+    Se excluye el "Plato del día" (precio manual, como en set-precios). Los
+    pedidos ya cargados conservan su precio (se guarda por ítem).
     """
-    platos = db.query(Plato).filter(Plato.activo.is_(True)).all()
+    platos = (
+        db.query(Plato)
+        .filter(Plato.activo.is_(True), Plato.es_plato_del_dia.is_(False))
+        .all()
+    )
     for p in platos:
         p.precio_efectivo = max(0.0, p.precio_efectivo + data.monto)
         p.precio_lista = max(0.0, p.precio_lista + data.monto)

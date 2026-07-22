@@ -397,12 +397,18 @@ async function loadRepartidoresDia() {
 
 // Llena un <select> con "(sin asignar)" + repartidores del día. Si el valor
 // actual no está en la lista (ej. un pedido viejo), se agrega para no perderlo.
+// Opciones <option> de un select de repartidor: "(sin asignar)" + los nombres,
+// marcando `seleccionado`. Si `seleccionado` no está en la lista se agrega (un
+// repartidor histórico que ya no está entre los del día sigue visible).
+function opcionesRepartidor(nombres, seleccionado) {
+  const lista = [...nombres];
+  if (seleccionado && !lista.includes(seleccionado)) lista.push(seleccionado);
+  return `<option value="">(sin asignar)</option>` +
+    lista.map((n) => `<option value="${escapeAttr(n)}" ${n === seleccionado ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+}
+
 function fillRepartidorSelect(sel, actual) {
-  const nombres = [...state.repartidoresDia];
-  if (actual && !nombres.includes(actual)) nombres.push(actual);
-  sel.innerHTML =
-    `<option value="">(sin asignar)</option>` +
-    nombres.map((n) => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join("");
+  sel.innerHTML = opcionesRepartidor(state.repartidoresDia, actual);
   sel.value = actual || "";
 }
 
@@ -455,9 +461,7 @@ async function openRutasModal() {
 }
 
 function rutasSelectHtml(gi, nombres, seleccionado) {
-  const opts = `<option value="">(sin asignar)</option>` +
-    nombres.map((n) => `<option value="${escapeAttr(n)}" ${n === seleccionado ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
-  return `<select class="inline rutas-select" data-gi="${gi}">${opts}</select>`;
+  return `<select class="inline rutas-select" data-gi="${gi}">${opcionesRepartidor(nombres, seleccionado)}</select>`;
 }
 
 // Evita que dos grupos queden asignados al mismo repartidor por accidente:
@@ -680,10 +684,7 @@ function pasaFiltro(p) {
 }
 
 function repartidorSelectHtml(p) {
-  const nombres = [...state.repartidoresDia];
-  if (p.repartidor && !nombres.includes(p.repartidor)) nombres.push(p.repartidor);
-  const opts = `<option value="">(sin asignar)</option>` +
-    nombres.map((n) => `<option value="${escapeAttr(n)}" ${n === p.repartidor ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+  const opts = opcionesRepartidor(state.repartidoresDia, p.repartidor);
   return `<select class="inline r-rep" ${p.anulado ? "disabled" : ""}>${opts}</select>`;
 }
 

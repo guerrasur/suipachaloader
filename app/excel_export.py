@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from .database import DATA_DIR
 from .models import Pedido
-from .totales import monto_envio
+from .totales import monto_descuento, monto_envio
 
 EXPORT_DIR = DATA_DIR / "exports"
 
@@ -175,7 +175,7 @@ def _regenerar_hoja(wb: Workbook, d: date, pedidos: list[Pedido], nombre_local: 
         hora = p.hora_pedido.strftime("%H:%M") if p.hora_pedido else ""
         salida = p.hora_salida.strftime("%H:%M") if p.hora_salida else ""
         envio = monto_envio(p)
-        desc = _monto_descuento_export(p)
+        desc = monto_descuento(p)
         fila = [
             p.numero or "", hora, p.tipo, p.cliente_nombre, p.cliente_direccion,
             _items_texto(p), envio or "", desc or "", p.total,
@@ -244,12 +244,3 @@ def _sumario(ws, row, etiqueta, valor, money=True, destacado=False, fill=None):
         # Chip de color en la etiqueta del método (texto blanco).
         ec.fill = fill
         ec.font = Font(bold=True, color="FFFFFF")
-
-
-def _monto_descuento_export(p: Pedido) -> float:
-    if not p.descuento_tipo or not p.descuento_valor:
-        return 0.0
-    sub = sum(i.cantidad * i.precio_unitario for i in p.items)
-    if p.descuento_tipo == "porcentaje":
-        return round(sub * p.descuento_valor / 100.0, 2)
-    return float(p.descuento_valor)

@@ -36,6 +36,26 @@ def _no_negativo(v):
     return max(0.0, float(v))
 
 
+class _ValidadoresPedido(BaseModel):
+    """Validadores compartidos entre PedidoIn y PedidoPatch.
+
+    En Pydantic v2 los validadores definidos en una clase base aplican a las
+    subclases; todos los campos referenciados existen en ambos schemas.
+    """
+
+    _v_tipo = field_validator("tipo", check_fields=False)(_validar_tipo)
+    _v_pago = field_validator("metodo_pago", check_fields=False)(_validar_metodo_pago)
+    _v_desc = field_validator("descuento_tipo", check_fields=False)(_validar_descuento_tipo)
+    _v_desc_val = field_validator("descuento_valor", check_fields=False)(_no_negativo)
+    _v_envio = field_validator("costo_envio", check_fields=False)(_no_negativo)
+
+    @model_validator(mode="after")
+    def _tope_porcentaje(self):
+        if self.descuento_tipo == "porcentaje" and (self.descuento_valor or 0) > 100:
+            self.descuento_valor = 100.0
+        return self
+
+
 # --- Clientes ---------------------------------------------------------------
 class ClienteIn(BaseModel):
     nombre: str
@@ -104,7 +124,7 @@ class ItemOut(ItemIn):
     id: int
 
 
-class PedidoIn(BaseModel):
+class PedidoIn(_ValidadoresPedido):
     fecha: date | None = None
     tipo: str = "Envío"
     cliente_nombre: str = ""
@@ -121,20 +141,8 @@ class PedidoIn(BaseModel):
     repartidor: str = ""
     notas: str = ""
 
-    _v_tipo = field_validator("tipo")(_validar_tipo)
-    _v_pago = field_validator("metodo_pago")(_validar_metodo_pago)
-    _v_desc = field_validator("descuento_tipo")(_validar_descuento_tipo)
-    _v_desc_val = field_validator("descuento_valor")(_no_negativo)
-    _v_envio = field_validator("costo_envio")(_no_negativo)
 
-    @model_validator(mode="after")
-    def _tope_porcentaje(self):
-        if self.descuento_tipo == "porcentaje" and (self.descuento_valor or 0) > 100:
-            self.descuento_valor = 100.0
-        return self
-
-
-class PedidoPatch(BaseModel):
+class PedidoPatch(_ValidadoresPedido):
     """Actualización parcial (edición inline en la tabla del día)."""
 
     tipo: str | None = None
@@ -155,18 +163,6 @@ class PedidoPatch(BaseModel):
     pagado: bool | None = None
     notas: str | None = None
     fecha: date | None = None
-
-    _v_tipo = field_validator("tipo")(_validar_tipo)
-    _v_pago = field_validator("metodo_pago")(_validar_metodo_pago)
-    _v_desc = field_validator("descuento_tipo")(_validar_descuento_tipo)
-    _v_desc_val = field_validator("descuento_valor")(_no_negativo)
-    _v_envio = field_validator("costo_envio")(_no_negativo)
-
-    @model_validator(mode="after")
-    def _tope_porcentaje(self):
-        if self.descuento_tipo == "porcentaje" and (self.descuento_valor or 0) > 100:
-            self.descuento_valor = 100.0
-        return self
 
 
 class PedidoOut(BaseModel):
