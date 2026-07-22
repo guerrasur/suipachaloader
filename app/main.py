@@ -1,6 +1,7 @@
 """Aplicación FastAPI: API + frontend estático."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,8 +16,6 @@ from .routers import clientes, meta, pedidos, platos, rutas
 from .seed import seed_platos
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
-app = FastAPI(title="Suipacha Loader — Gestor de Pedidos")
 
 # Columnas agregadas después de la creación original de la BD. create_all no
 # altera tablas existentes, así que se agregan acá si faltan (idempotente).
@@ -66,8 +65,8 @@ def _indice_unico_numero() -> None:
         print(f"[aviso] No se pudo crear el índice único de números: {e}")
 
 
-@app.on_event("startup")
-def startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrar_columnas()
     _indice_unico_numero()
@@ -81,7 +80,10 @@ def startup() -> None:
     # refresco periódico para no depender solo del momento de arranque.
     hacer_backup()
     iniciar_backups_periodicos()
+    yield
 
+
+app = FastAPI(title="Suipacha Loader — Gestor de Pedidos", lifespan=lifespan)
 
 app.include_router(platos.router)
 app.include_router(clientes.router)

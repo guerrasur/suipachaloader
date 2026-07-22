@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import config as cfg
@@ -31,6 +32,20 @@ def _aplicar_items(pedido: Pedido, items: list[ItemIn]) -> None:
 def _parse_hora(valor: str) -> time:
     h, m = valor.split(":")
     return time(int(h), int(m))
+
+
+def _commit_o_409(db: Session) -> None:
+    """Commit que traduce la colisión del índice único de número a un 409.
+
+    El índice ``ix_pedidos_fecha_numero`` impide dos pedidos con el mismo
+    número el mismo día; ante un choque (race de _proximo_numero o mover un
+    pedido a una fecha ocupada) se devuelve un 409 claro en vez de un 500.
+    """
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Número de pedido en conflicto, reintentá.")
 
 
 def _serializar(db: Session, p: Pedido) -> dict:
@@ -116,7 +131,7 @@ def crear(data: PedidoIn, db: Session = Depends(get_db)):
     _aplicar_items(pedido, data.items)
     pedido.total = calcular_total(pedido)
     db.add(pedido)
-    db.commit()
+    _commit_o_409(db)
     db.refresh(pedido)
     return pedido
 
@@ -137,14 +152,23 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
         elif not campos["facturado"]:
             pedido.hora_facturado = None
 
+    # Mover un pedido de fecha reasigna el número: el que tenía puede estar ya
+    # ocupado en la fecha destino (el índice único no lo permitiría) y los
+    # números reinician por día.
+    nueva_fecha = campos.get("fecha")
+    reasignar_numero = nueva_fecha is not None and nueva_fecha != pedido.fecha
+
     for k, v in campos.items():
         setattr(pedido, k, v)
+
+    if reasignar_numero:
+        pedido.numero = _proximo_numero(db, pedido.fecha)
 
     if items is not None:
         _aplicar_items(pedido, [ItemIn(**i) for i in items])
 
     pedido.total = calcular_total(pedido)
-    db.commit()
+    _commit_o_409(db)
     db.refresh(pedido)
     # Con las banderas de alerta: el frontend actualiza la fila sin recargar.
     return _serializar(db, pedido)
