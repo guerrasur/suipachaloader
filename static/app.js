@@ -386,6 +386,259 @@ setupAutocomplete("f-cliente", "ac-cliente", async (q) => {
   }));
 });
 
+// ------------------------------------------- pegar/parsear mensaje WhatsApp
+// Prellena el formulario a partir del texto pegado, con reglas simples contra
+// la Carta (sin IA). No pretende acertar el 100%: acierta lo evidente y el
+// usuario corrige. Ver parseMensajeWhatsApp (función pura, testeable a mano).
+
+// Normaliza para comparar: minúsculas, sin acentos, sin puntuación.
+function _norm(s) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Cantidades escritas con palabra (hasta diez alcanza para un pedido).
+const _NUM_PALABRA = {
+  un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, docena: 12, media: 6,
+};
+
+// Palabras que sugieren que una línea es la dirección de entrega.
+const _PISTAS_DIRECCION = [
+  "calle", "av", "avenida", "pasaje", "psje", "piso", "depto", "dpto", "dto",
+  "departamento", "timbre", "esquina", "entre", "torre", "block", "manzana",
+  "mza", "casa", "lote", "barrio", "altura", "ruta", "km",
+];
+
+// Cantidad dentro de un segmento de ítem: primer número (dígitos o palabra).
+function _cantidadDe(seg, norm) {
+  const m = norm.match(/(?:^|\s)x?\s*(\d{1,2})(?:\s|x|$)/);
+  if (m) return Math.min(50, Math.max(1, parseInt(m[1], 10)));
+  for (const w of norm.split(" ")) {
+    if (_NUM_PALABRA[w]) return _NUM_PALABRA[w];
+  }
+  return 1;
+}
+
+// ¿El plato (por su nombre normalizado) aparece en el segmento? Match por
+// substring o por presencia de todas sus palabras significativas (>3 letras).
+function _platoEnSegmento(nombreNorm, segNorm, segWords) {
+  if (nombreNorm.length < 3) return false;
+  if (segNorm.includes(nombreNorm)) return true;
+  // Cada palabra significativa (>3 letras) del plato tiene que estar en el
+  // segmento, tolerando plural/singular por prefijo ("milanesas"~"milanesa").
+  const sig = nombreNorm.split(" ").filter((w) => w.length > 3);
+  const casa = (w) => segWords.some(
+    (sw) => sw === w || (sw.length > 3 && (sw.startsWith(w) || w.startsWith(sw)))
+  );
+  return sig.length > 0 && sig.every(casa);
+}
+
+function _detectarPago(norm) {
+  if (/\btransfer/.test(norm) || /\btransf\b/.test(norm)) return "Transferencia";
+  if (/\befectivo\b|\befvo\b|\bcash\b/.test(norm)) return "Efectivo";
+  if (/\bqr\b|mercado ?pago|\bmp\b/.test(norm)) return "QR";
+  if (/posnet|tarjeta|debito|credito|\bpos\b/.test(norm)) return "Posnet";
+  return null;
+}
+
+// "paga con 20000", "abona con 20 mil", "vuelto de 5000", "justo".
+function _detectarPagaCon(texto, norm) {
+  if (/\b(justo|exacto|pago justo)\b/.test(norm)) return "Justo";
+  const m = texto.match(/(?:paga|abona|pago)\s+con\s*\$?\s*([\d.]{3,})/i)
+    || texto.match(/vuelto\s+(?:de|para|sobre)?\s*\$?\s*([\d.]{3,})/i);
+  if (m) return m[1].replace(/\./g, "");
+  return null;
+}
+
+// Teléfono: preferimos una línea etiquetada; si no, una tira larga de dígitos.
+function _detectarTelefono(lineas) {
+  for (const l of lineas) {
+    if (/\b(tel|telefono|cel|celular|whatsapp|wsp|wpp)\b/i.test(_norm(l))) {
+      const d = l.replace(/\D/g, "");
+      if (d.length >= 8 && d.length <= 15) return d;
+    }
+  }
+  for (const l of lineas) {
+    const m = l.match(/(?:\+?\d[\s\-]?){8,15}/);
+    if (m) {
+      const d = m[0].replace(/\D/g, "");
+      // Evitar confundir un monto ("paga con 20000") con un teléfono.
+      if (d.length >= 8 && d.length <= 15 && !/paga|abona|vuelto/i.test(l)) return d;
+    }
+  }
+  return null;
+}
+
+// Devuelve {resto, valor} si la línea empieza con "etiqueta:" (o "etiqueta -").
+function _campoEtiquetado(linea, etiquetas) {
+  const m = linea.match(/^\s*([a-záéíóúñ. ]+?)\s*[:\-]\s*(.+)$/i);
+  if (!m) return null;
+  const clave = _norm(m[1]);
+  if (etiquetas.some((e) => clave === e || clave.startsWith(e))) return m[2].trim();
+  return null;
+}
+
+// Núcleo del parser. `platos` es state.platos (se filtran los del día).
+function parseMensajeWhatsApp(texto, platos) {
+  const lineas = (texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const normTotal = _norm(texto);
+  const catalogo = platos
+    .filter((p) => !p.es_plato_del_dia)
+    .map((p) => ({ p, nombreNorm: _norm(p.nombre) }));
+
+  const res = {
+    nombre: null, direccion: null, telefono: null, indicaciones: null,
+    metodo_pago: null, paga_con: null, items: [], faltantes: [],
+  };
+
+  // Campos etiquetados explícitos (ganan a cualquier heurística).
+  const indics = [];
+  const lineasLibres = [];
+  for (const l of lineas) {
+    const nom = _campoEtiquetado(l, ["nombre", "cliente"]);
+    const dir = _campoEtiquetado(l, ["direccion", "dir", "domicilio", "direc"]);
+    const ind = _campoEtiquetado(l, ["timbre", "piso", "depto", "dpto", "indicaciones", "aclaracion", "aclaraciones", "referencia"]);
+    if (nom) { res.nombre = res.nombre || nom; continue; }
+    if (dir) { res.direccion = res.direccion || dir; continue; }
+    if (ind) { indics.push(ind); continue; }
+    lineasLibres.push(l);
+  }
+
+  // Ítems: se busca en cada segmento (separado por saltos, comas, "+", "y").
+  const porPlato = new Map();
+  const segmentos = (texto || "").split(/[\n,+]+|\by\b/i);
+  for (const seg of segmentos) {
+    const segNorm = _norm(seg);
+    if (!segNorm) continue;
+    const segWords = segNorm.split(" ");
+    let mejor = null;
+    for (const c of catalogo) {
+      if (_platoEnSegmento(c.nombreNorm, segNorm, segWords)) {
+        if (!mejor || c.nombreNorm.length > mejor.nombreNorm.length) mejor = c;
+      }
+    }
+    if (!mejor) continue;
+    const cant = _cantidadDe(seg, segNorm);
+    const prev = porPlato.get(mejor.p.id);
+    if (prev) prev.cantidad += cant;
+    else porPlato.set(mejor.p.id, { plato_id: mejor.p.id, nombre: mejor.p.nombre, cantidad: cant });
+  }
+  res.items = [...porPlato.values()];
+
+  // Pago y "paga con".
+  res.metodo_pago = _detectarPago(normTotal);
+  res.paga_con = _detectarPagaCon(texto, normTotal);
+
+  // Teléfono.
+  res.telefono = _detectarTelefono(lineas);
+
+  // Dirección por heurística si no vino etiquetada: la línea libre con más
+  // pistas de dirección (o que tenga calle + número), que no sea el teléfono.
+  if (!res.direccion) {
+    let mejorDir = null, mejorScore = 0;
+    for (const l of lineasLibres) {
+      const n = _norm(l);
+      if (!n) continue;
+      let score = _PISTAS_DIRECCION.reduce((s, k) => s + (new RegExp("\\b" + k + "\\b").test(n) ? 1 : 0), 0);
+      // Calle + altura: letras seguidas de un número (típico "Suipacha 1234").
+      if (/[a-z]{3,}\s+\d{2,5}/.test(n)) score += 2;
+      // Restar si la línea es claramente un ítem del pedido.
+      if (catalogo.some((c) => _platoEnSegmento(c.nombreNorm, n, n.split(" ")))) score -= 3;
+      if (res.telefono && l.replace(/\D/g, "") === res.telefono) score -= 5;
+      if (score > mejorScore) { mejorScore = score; mejorDir = l; }
+    }
+    if (mejorDir) res.direccion = mejorDir;
+  }
+
+  // Nombre por heurística: si no vino etiquetado, la primera línea libre corta,
+  // sin dígitos, que no sea la dirección ni un ítem.
+  if (!res.nombre) {
+    for (const l of lineasLibres) {
+      if (l === res.direccion) continue;
+      const n = _norm(l);
+      if (!n || /\d/.test(l)) continue;
+      if (n.split(" ").length > 4) continue;
+      if (catalogo.some((c) => _platoEnSegmento(c.nombreNorm, n, n.split(" ")))) continue;
+      if (_detectarPago(n)) continue;
+      res.nombre = l;
+      break;
+    }
+  }
+
+  if (indics.length) res.indicaciones = indics.join(" · ");
+
+  // Chequeo de datos faltantes (idea 3): avisos accionables.
+  if (!res.items.length) res.faltantes.push("ítems (no se reconoció ningún plato de la Carta)");
+  if (!res.metodo_pago) res.faltantes.push("medio de pago");
+  if (!res.direccion) res.faltantes.push("dirección");
+  return res;
+}
+
+// Aplica el resultado del parser al formulario y al estado de ítems.
+function aplicarParseWA(res) {
+  if (res.nombre) $("f-cliente").value = res.nombre;
+  if (res.direccion) $("f-direccion").value = res.direccion;
+  if (res.telefono) $("f-telefono").value = res.telefono;
+  if (res.indicaciones) $("f-indicaciones").value = res.indicaciones;
+  if (res.metodo_pago) $("f-pago").value = res.metodo_pago;
+  toggleVuelto();
+  if (res.paga_con && $("f-pago").value === "Efectivo") $("f-vuelto").value = res.paga_con;
+
+  if (res.items.length) {
+    // El precio se toma de la Carta según el método de pago ya fijado arriba.
+    state.items = res.items.map((it) => {
+      const p = state.platos.find((x) => x.id === it.plato_id);
+      return {
+        plato_id: it.plato_id,
+        nombre: p ? p.nombre : it.nombre,
+        precio_unitario: p ? precioSegunMetodo(p) : 0,
+        cantidad: it.cantidad,
+        es_pdd: false,
+      };
+    });
+  }
+  renderItems(); toggleEnvio(); toggleVentanilla(); recalc(); updateVueltoCalc();
+}
+
+// Resumen visible de lo detectado y lo que falta.
+function renderReporteWA(res) {
+  const cont = $("wa-report");
+  const filas = [];
+  const ok = (t, v) => filas.push(`<div class="wa-line"><span class="wa-ok">✓</span><span>${escapeHtml(t)}</span><span class="wa-val">${escapeHtml(v)}</span></div>`);
+  if (res.nombre) ok("Cliente:", res.nombre);
+  if (res.direccion) ok("Dirección:", res.direccion);
+  if (res.telefono) ok("Teléfono:", res.telefono);
+  if (res.items.length) ok("Ítems:", res.items.map((i) => `${i.cantidad}× ${i.nombre}`).join(", "));
+  if (res.metodo_pago) ok("Pago:", res.metodo_pago + (res.paga_con ? ` (paga con ${res.paga_con})` : ""));
+  if (res.indicaciones) ok("Indicaciones:", res.indicaciones);
+  for (const f of res.faltantes) {
+    filas.push(`<div class="wa-line"><span class="wa-falta">⚠</span><span class="wa-falta">Falta ${escapeHtml(f)}</span></div>`);
+  }
+  cont.innerHTML = filas.join("");
+  cont.classList.remove("hidden");
+}
+
+$("wa-parse").addEventListener("click", () => {
+  const texto = $("wa-text").value;
+  if (!texto.trim()) { toast("Pegá primero el mensaje del cliente.", "info"); return; }
+  const res = parseMensajeWhatsApp(texto, state.platos);
+  aplicarParseWA(res);
+  renderReporteWA(res);
+  const n = res.items.length;
+  toast(n ? `Prellenado: ${n} ítem(s) reconocido(s). Revisá y corregí.` : "No se reconocieron platos; completá a mano.", n ? "ok" : "info");
+});
+
+$("wa-clear").addEventListener("click", () => {
+  $("wa-text").value = "";
+  $("wa-report").classList.add("hidden");
+  $("wa-report").innerHTML = "";
+});
+
 // ------------------------------------------------------ repartidores del día
 async function loadRepartidoresDia() {
   const r = await api("/api/repartidores-dia?fecha=" + state.fecha);

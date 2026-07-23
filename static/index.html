@@ -37,6 +37,21 @@
 
         <div id="banner-hora" class="banner warn"></div>
 
+        <!-- Pegar y parsear el mensaje de WhatsApp: prellena el formulario con
+             reglas contra la Carta (sin IA). Ver parseMensajeWhatsApp en app.js. -->
+        <details class="wa-parser" id="wa-parser">
+          <summary>📋 Pegar mensaje de WhatsApp</summary>
+          <div class="wa-parser-body">
+            <p class="muted" style="font-size:.82rem;margin:.2rem 0 .5rem;">Pegá el mensaje del cliente y prellenamos cliente, dirección, ítems y pago. Revisá y corregí antes de guardar.</p>
+            <textarea id="wa-text" rows="5" placeholder="Ej.:&#10;Juan Pérez&#10;Av. Suipacha 1234, piso 3 depto B, timbre azul&#10;2 milanesas napolitanas y 1 tarta&#10;Efectivo, paga con 20000&#10;11 2345 6789"></textarea>
+            <div class="row" style="margin-top:.5rem;">
+              <button type="button" class="btn secondary sm" id="wa-parse">✨ Parsear al formulario</button>
+              <button type="button" class="btn ghost sm" id="wa-clear">Limpiar</button>
+            </div>
+            <div id="wa-report" class="wa-report hidden"></div>
+          </div>
+        </details>
+
         <form id="pedido-form">
           <div class="row">
             <div class="field grow autocomplete">

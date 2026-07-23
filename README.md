@@ -61,6 +61,11 @@ automáticamente. Al arrancar:
   ítems con precio autocompletado según método de pago (editable), envío por
   defecto $3000 con toggle "no cobrar", descuento por cliente, **total siempre
   autocalculado** (ítems + envío − descuento).
+- **Pegar mensaje de WhatsApp:** pegás el mensaje del cliente y se **prellena**
+  el formulario (cliente, dirección, teléfono, ítems y medio de pago) con
+  reglas contra la Carta (sin IA). Muestra un resumen de lo detectado y avisa
+  lo que falta (p. ej. "falta medio de pago"). Acierta lo evidente; se revisa
+  y corrige antes de guardar. El cliente nuevo se da de alta solo al guardar.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Alertas de demora:** pedidos sin salir pasados X minutos y sin facturar

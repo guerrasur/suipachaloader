@@ -408,6 +408,31 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
   .export-mes-wrap { margin-left: 0; }
 }
 
+/* --------------------------------------------- pegar/parsear WhatsApp */
+.wa-parser {
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--panel); padding: .55rem .75rem; margin: 0 0 .9rem;
+}
+.wa-parser summary {
+  display: flex; align-items: center; gap: .4rem; cursor: pointer;
+  font-size: .92rem; font-weight: 700; color: var(--ink-soft); list-style: none;
+}
+.wa-parser summary::-webkit-details-marker { display: none; }
+.wa-parser summary::before { content: "▸"; font-size: .75rem; color: var(--muted); transition: transform .15s ease; }
+.wa-parser[open] summary::before { transform: rotate(90deg); }
+.wa-parser-body { padding-top: .7rem; }
+.wa-parser textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 96px;
+  padding: .55rem .65rem; border: 1px solid var(--line-strong); border-radius: 6px;
+  background: #fff; color: var(--ink);
+}
+.wa-parser textarea:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
+.wa-report { margin-top: .7rem; font-size: .85rem; display: grid; gap: .28rem; }
+.wa-report .wa-line { display: flex; gap: .45rem; align-items: baseline; }
+.wa-report .wa-ok { color: var(--ok); }
+.wa-report .wa-falta { color: var(--warn); }
+.wa-report .wa-val { color: var(--ink-soft); }
+
 @media (prefers-reduced-motion: reduce) {
   *, .view.active, .modal-back.show, .modal { animation: none !important; transition: none !important; }
 }
