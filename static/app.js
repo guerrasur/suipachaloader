@@ -513,8 +513,44 @@ function _campoEtiquetado(linea, etiquetas) {
   return null;
 }
 
+// Quita el prefijo que WhatsApp agrega en cada línea al copiar/exportar una
+// conversación ("[12:15 p.m., 23/7/2026] Nombre:" o "23/7/2026, 12:15 - Nombre:").
+// Sin esos prefijos el timestamp no ensucia cantidades/teléfono y las líneas
+// quedan limpias. Devuelve {texto, remitente} (remitente = quien más escribió,
+// el cliente). Si no hay prefijos, devuelve el texto igual y remitente null.
+function _limpiarWhatsApp(texto) {
+  const RE_IOS = /^\s*\[[^\]\n]*\]\s*([^:\n]{1,40}?):\s*/;        // [hora, fecha] Nombre:
+  const RE_AND = /^\s*\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}(?:\s*[ap]\.?\s*m\.?)?\s*-\s*([^:\n]{1,40}?):\s*/i;
+  const remitentes = {};
+  let hubo = false;
+  const limpio = (texto || "").split(/\r?\n/).map((l) => {
+    const m = l.match(RE_IOS) || l.match(RE_AND);
+    if (!m) return l;
+    hubo = true;
+    const r = m[1].trim();
+    remitentes[r] = (remitentes[r] || 0) + 1;
+    return l.slice(m[0].length);
+  }).join("\n");
+  if (!hubo) return { texto, remitente: null };
+  let remitente = null, mejor = 0;
+  for (const [r, n] of Object.entries(remitentes)) if (n > mejor) { mejor = n; remitente = r; }
+  return { texto: limpio, remitente };
+}
+
+// Limpia el nombre del remitente de WhatsApp: corta en separadores comunes y
+// descarta la cola desde el primer número ("Cami reserva // Venezuela 151 6B"
+// -> "Cami reserva").
+function _nombreDeRemitente(remitente) {
+  if (!remitente) return null;
+  let n = remitente.split(/\/\/|\||,|-|:/)[0].trim();  // antes del primer separador
+  n = n.replace(/\s+\d.*$/, "").trim();                // saca la parte con números
+  return n || null;
+}
+
 // Núcleo del parser. `platos` es state.platos (se filtran los del día).
 function parseMensajeWhatsApp(texto, platos) {
+  const limpio = _limpiarWhatsApp(texto);
+  texto = limpio.texto;
   const lineas = (texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const normTotal = _norm(texto);
   const catalogo = platos
@@ -584,15 +620,24 @@ function parseMensajeWhatsApp(texto, platos) {
     }
     if (mejorDir) res.direccion = mejorDir;
   }
+  // Sacar una preposición inicial de la dirección ("Para Venezuela 151" ->
+  // "Venezuela 151").
+  if (res.direccion) {
+    res.direccion = res.direccion.replace(/^\s*(para|pa|a|en|direccion|direc|dir)\b[\s:]*/i, "").trim();
+  }
 
-  // Nombre por heurística: si no vino etiquetado, la primera línea libre corta,
-  // sin dígitos, que no sea la dirección ni un ítem.
+  // Nombre: si no vino etiquetado, usar el remitente de WhatsApp (fuerte); si no,
+  // la primera línea libre corta, sin dígitos, que no sea saludo/ítem/pago.
+  if (!res.nombre) res.nombre = _nombreDeRemitente(limpio.remitente);
   if (!res.nombre) {
+    // Saludos y frases de relleno que no son un nombre.
+    const RELLENO = /^(hola|buenas|buen dia|buenos dias|buenas tardes|buenas noches|como estan|como andan|que tal|gracias|te puedo pedir|queria|quiero|necesito|hola buenas|pedido|hola que tal)\b/;
     for (const l of lineasLibres) {
       if (l === res.direccion) continue;
       const n = _norm(l);
       if (!n || /\d/.test(l)) continue;
       if (n.split(" ").length > 4) continue;
+      if (RELLENO.test(n)) continue;
       if (catalogo.some((c) => _platoEnSegmento(c.nombreNorm, n, n.split(" ")))) continue;
       if (_detectarPago(n)) continue;
       res.nombre = l;
