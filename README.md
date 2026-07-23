@@ -61,9 +61,10 @@ automáticamente. Al arrancar:
   ítems con precio autocompletado según método de pago (editable), envío por
   defecto $3000 con toggle "no cobrar", descuento por cliente, **total siempre
   autocalculado** (ítems + envío − descuento).
-- **Pegar mensaje de WhatsApp:** pegás el mensaje del cliente y se **prellena**
-  el formulario (cliente, dirección, teléfono, ítems y medio de pago) con
-  reglas contra la Carta (sin IA). Separa las **aclaraciones** (piso, depto,
+- **Pegar mensaje de WhatsApp:** pegás el mensaje del cliente (también sirve
+  pegar el **chat exportado**, con los `[hora, fecha] Nombre:` de cada línea) y
+  se **prellena** el formulario (cliente, dirección, teléfono, ítems y medio de
+  pago) con reglas contra la Carta (sin IA). Separa las **aclaraciones** (piso, depto,
   timbre…) de la dirección y las manda a Indicaciones. Muestra un resumen de lo
   detectado y avisa lo que falta (nombre, medio de pago, dirección, teléfono).
   Acierta lo evidente; se revisa y corrige antes de guardar (y al guardar avisa
