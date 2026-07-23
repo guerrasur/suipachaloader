@@ -179,7 +179,8 @@
           <button class="chip" data-f="takeaway">Take away</button>
           <button class="chip" data-f="reserva">Reserva</button>
           <button class="chip" data-f="ventanilla">Ventanilla</button>
-          <button type="button" class="btn secondary sm" id="btn-rutas" title="Agrupar los envíos pendientes por cercanía" style="margin-left:auto;">🗺️ Optimizar rutas</button>
+          <button type="button" class="btn secondary sm" id="btn-ticket-repartidor" title="Una imagen y un contacto con todos los pedidos de un repartidor" style="margin-left:auto;">🛵 Ticket por repartidor</button>
+          <button type="button" class="btn secondary sm" id="btn-rutas" title="Agrupar los envíos pendientes por cercanía">🗺️ Optimizar rutas</button>
         </div>
         <div class="leyenda muted">
           <span><i class="dot dot-ok"></i> Salió</span>
@@ -399,6 +400,18 @@
       <div id="rutas-contenido"></div>
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn ghost" id="rutas-cerrar">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal elegir repartidor para el ticket combinado -->
+  <div class="modal-back" id="modal-ticket-rep">
+    <div class="modal">
+      <h2>Ticket por repartidor</h2>
+      <p class="muted" style="font-size:.85rem;">Elegí un repartidor para armar una sola imagen y un solo contacto con todos sus envíos pendientes de hoy.</p>
+      <div id="ticket-rep-list"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+        <button class="btn ghost" id="ticket-rep-cancel">Cancelar</button>
       </div>
     </div>
   </div>

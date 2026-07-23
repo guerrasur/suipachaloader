@@ -313,6 +313,14 @@ $("pedido-form").addEventListener("submit", async (e) => {
     repartidor: $("f-repartidor").value.trim(),
     notas: $("f-notas").value.trim(),
   };
+  // Confirmar si faltan datos críticos (el medio de pago siempre trae un valor
+  // en el select, así que no se chequea). Ventanilla/Take away no llevan
+  // dirección, por eso la dirección solo es crítica en Envío.
+  const faltan = [];
+  if (!body.cliente_nombre) faltan.push("nombre");
+  if (body.tipo === "Envío" && !body.cliente_direccion) faltan.push("dirección");
+  if (!body.items.length) faltan.push("ítems");
+  if (faltan.length && !confirm(`Faltan: ${faltan.join(", ")}. ¿Guardar el pedido igual?`)) return;
   try {
     const editando = !!state.editId;
     let guardado;
@@ -474,6 +482,28 @@ function _detectarTelefono(lineas) {
   return null;
 }
 
+// Palabras que marcan una aclaración de entrega (van a Indicaciones, no a la
+// dirección). Se dejan afuera "entre"/"esquina" porque ayudan a ubicar la calle.
+const _KW_INDIC = /\b(pisos?|depto|dpto|dto|departamento|timbre|portero|porteria|planta baja|pb|fondo|contrafrente|interno)\b/i;
+
+// Separa el domicilio de sus aclaraciones. Devuelve {direccion, indicaciones}.
+// Divide por comas y, dentro de una parte sin coma ("Suipacha 1234 piso 3"),
+// corta en la primera palabra de aclaración.
+function _partirDireccion(linea) {
+  const dir = [], ind = [];
+  for (const parte of linea.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const m = parte.match(_KW_INDIC);
+    if (!m) { dir.push(parte); continue; }
+    if (m.index <= 2) { ind.push(parte); continue; } // toda la parte es aclaración
+    dir.push(parte.slice(0, m.index).trim());          // "Suipacha 1234"
+    ind.push(parte.slice(m.index).trim());             // "piso 3"
+  }
+  let direccion = dir.filter(Boolean).join(", ");
+  const indicaciones = ind.filter(Boolean).join(", ");
+  if (!direccion) direccion = linea; // si todo pareció aclaración, no perder el dato
+  return { direccion, indicaciones: direccion === linea ? "" : indicaciones };
+}
+
 // Devuelve {resto, valor} si la línea empieza con "etiqueta:" (o "etiqueta -").
 function _campoEtiquetado(linea, etiquetas) {
   const m = linea.match(/^\s*([a-záéíóúñ. ]+?)\s*[:\-]\s*(.+)$/i);
@@ -570,12 +600,21 @@ function parseMensajeWhatsApp(texto, platos) {
     }
   }
 
+  // Separar la dirección de sus aclaraciones (piso/depto/timbre → Indicaciones),
+  // venga etiquetada o por heurística. Lo extraído se suma a las indicaciones.
+  if (res.direccion) {
+    const partida = _partirDireccion(res.direccion);
+    res.direccion = partida.direccion;
+    if (partida.indicaciones) indics.push(partida.indicaciones);
+  }
   if (indics.length) res.indicaciones = indics.join(" · ");
 
   // Chequeo de datos faltantes (idea 3): avisos accionables.
   if (!res.items.length) res.faltantes.push("ítems (no se reconoció ningún plato de la Carta)");
+  if (!res.nombre) res.faltantes.push("nombre del cliente");
   if (!res.metodo_pago) res.faltantes.push("medio de pago");
   if (!res.direccion) res.faltantes.push("dirección");
+  if (!res.telefono) res.faltantes.push("teléfono (opcional)");
   return res;
 }
 
@@ -749,6 +788,7 @@ function renderRutas(r) {
         <ol style="margin:.2rem 0 .8rem 1.2rem;padding:0;">${paradas}</ol>
         <div class="row" style="flex-wrap:wrap;align-items:center;">
           <a class="btn secondary sm" href="${g.maps_link}" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
+          <button type="button" class="btn secondary sm rutas-ticket" data-gi="${gi}">🖼 Ticket del repartidor (${g.pedidos.length})</button>
           <label class="muted" style="margin-left:.4rem;">Asignar a:</label>
           ${rutasSelectHtml(gi, nombres, preseleccion)}
         </div>
@@ -773,6 +813,16 @@ function renderRutas(r) {
   }
   cont.innerHTML = html;
   evitarSeleccionDuplicada(cont);
+
+  // Ticket combinado del grupo: se mapean los ids del grupo (recortados por la
+  // API de rutas) a los pedidos completos de state.pedidos, en el orden óptimo.
+  cont.querySelectorAll(".rutas-ticket").forEach((b) =>
+    b.addEventListener("click", () => {
+      const g = r.grupos[+b.dataset.gi];
+      const peds = g.pedidos.map((gp) => state.pedidos.find((p) => p.id === gp.id)).filter(Boolean);
+      openTicketLote(peds, "Repartidor " + g.etiqueta, { maps_link: g.maps_link });
+    })
+  );
 
   $("rutas-confirmar")?.addEventListener("click", async () => {
     const btn = $("rutas-confirmar");
@@ -1080,6 +1130,8 @@ function editarPedido(p) {
 
 // ------------------------------------------------- ticket para el repartidor
 let _ticketPedido = null;
+let _ticketLote = null;   // en modo lote: array de pedidos completos de un repartidor
+let _ticketSubtitulo = ""; // repartidor/etiqueta que titula el lote
 
 function telefonoWa(tel) {
   // Normaliza a formato wa.me: solo dígitos, con 549 (celular AR) adelante.
@@ -1184,6 +1236,7 @@ function googleMapsSearchLink(direccion) {
 
 function openTicket(p) {
   _ticketPedido = p;
+  _ticketLote = null;
   $("ticket-title").textContent = `Ticket pedido ${p.numero != null ? "N° " + p.numero : "#" + p.id}`;
   drawTicket(p);
   const conTel = !!(p.cliente_telefono || "").trim();
@@ -1198,17 +1251,161 @@ function openTicket(p) {
   const conRepartidor = p.tipo === "Envío" && !!(p.repartidor || "").trim();
   $("ticket-ruta").style.display = conRepartidor ? "" : "none";
   $("ticket-ruta").textContent = "🗺️ Ruta optimizada";
+  $("ticket-maps").textContent = "🗺️ Ver dirección en Maps";
   $("ticket-copiar").textContent = "📋 Copiar imagen";
   $("ticket-contacto").textContent = "👤 Copiar contacto";
+  $("ticket-hint").textContent = "Copiá la imagen y pegala (Ctrl+V) en el chat de WhatsApp del repartidor. Con \"Copiar contacto\" le pegás también el teléfono del cliente.";
   $("modal-ticket").classList.add("show");
 }
 
 function descargarTicket() {
-  const p = _ticketPedido;
   const a = document.createElement("a");
-  a.download = `pedido-${p && p.numero != null ? p.numero : (p ? p.id : "ticket")}.png`;
+  if (_ticketLote) {
+    a.download = `repartidor-${(_ticketSubtitulo || "lote").replace(/[^a-z0-9]+/gi, "-")}.png`;
+  } else {
+    const p = _ticketPedido;
+    a.download = `pedido-${p && p.numero != null ? p.numero : (p ? p.id : "ticket")}.png`;
+  }
   a.href = $("ticket-canvas").toDataURL("image/png");
   a.click();
+}
+
+// ---- Ticket combinado: una imagen + un contacto con todos los pedidos que
+//      lleva un mismo repartidor. Reusa el modal #modal-ticket en modo lote.
+
+// "Paga con" legible desde el detalle de efectivo (texto libre con dígitos).
+function _pagaConTexto(p) {
+  if (!p.pago_efectivo_detalle) return "";
+  const digits = p.pago_efectivo_detalle.replace(/\D/g, "");
+  return digits ? money(parseInt(digits, 10)) : p.pago_efectivo_detalle;
+}
+
+function drawTicketLote(pedidos, subtitulo) {
+  const W = 640, S = 2, M = 40;               // ancho, escala, margen
+  const cv = $("ticket-canvas");
+  cv.style.width = "100%";
+
+  // Pasada de medición sobre un canvas offscreen: calcula el alto necesario
+  // según cuántas líneas ocupa cada texto con su fuente.
+  const mc = document.createElement("canvas").getContext("2d");
+  const efectivoTotal = pedidos
+    .filter((p) => p.metodo_pago === "Efectivo")
+    .reduce((s, p) => s + (p.total || 0), 0);
+
+  // Modelo de bloques (mismas fuentes en medición y dibujo).
+  const bloques = pedidos.map((p) => {
+    mc.font = "bold 34px Arial, sans-serif";
+    const l1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
+    const l1w = wrapText(mc, l1, W - 2 * M - 70);
+    let indw = [];
+    if (p.indicaciones) { mc.font = "26px Arial, sans-serif"; indw = wrapText(mc, p.indicaciones, W - 2 * M - 70); }
+    return { p, l1w, indw };
+  });
+
+  let H = M + 52 + 34 + 40;                    // encabezado: título + fecha + resumen
+  for (const b of bloques) {
+    H += 24;                                   // separador
+    H += 46;                                   // N°
+    H += b.l1w.length * 42;
+    H += b.indw.length * 32;
+    H += 44;                                   // línea de cobro
+    H += 16;
+  }
+  H += M;
+
+  cv.width = W * S; cv.height = H * S;
+  const ctx = cv.getContext("2d");
+  ctx.scale(S, S);
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 6; ctx.strokeRect(3, 3, W - 6, H - 6);
+
+  let y = M + 40;
+  ctx.textAlign = "center"; ctx.fillStyle = "#111";
+  ctx.font = "900 40px Arial, sans-serif";
+  ctx.fillText("🛵 " + (subtitulo || "Repartidor"), W / 2, y);
+  y += 34;
+  ctx.font = "24px Arial, sans-serif"; ctx.fillStyle = "#555";
+  ctx.fillText(fmtFecha(state.fecha), W / 2, y);
+  y += 34;
+  ctx.font = "bold 26px Arial, sans-serif"; ctx.fillStyle = "#111";
+  const resumen = `${pedidos.length} pedido${pedidos.length === 1 ? "" : "s"}`
+    + (efectivoTotal > 0 ? ` · Efectivo a cobrar: ${money(efectivoTotal)}` : "");
+  ctx.fillText(resumen, W / 2, y);
+  y += 20;
+
+  for (const b of bloques) {
+    const p = b.p;
+    y += 24;
+    ctx.strokeStyle = "#bbb"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(M, y - 12); ctx.lineTo(W - M, y - 12); ctx.stroke();
+
+    ctx.textAlign = "left"; ctx.fillStyle = "#111";
+    ctx.font = "900 34px Arial, sans-serif";
+    ctx.fillText(p.numero != null ? "N° " + p.numero : "#" + p.id, M, y + 24);
+    // Cobro alineado a la derecha en la misma fila del número.
+    ctx.textAlign = "right";
+    if (p.metodo_pago === "Efectivo") {
+      ctx.fillStyle = "#b3261e"; ctx.font = "900 30px Arial, sans-serif";
+      const pc = _pagaConTexto(p);
+      ctx.fillText(`Cobrar ${money(p.total)}${pc ? " · paga " + pc : ""}`, W - M, y + 22);
+    } else {
+      ctx.fillStyle = "#1f8a4c"; ctx.font = "900 28px Arial, sans-serif";
+      ctx.fillText(`PAGO ✔ ${p.metodo_pago}`, W - M, y + 22);
+    }
+    y += 46;
+
+    ctx.textAlign = "left"; ctx.fillStyle = "#111";
+    ctx.font = "bold 34px Arial, sans-serif";
+    for (const l of b.l1w) { ctx.fillText(l, M, y + 24); y += 42; }
+    if (b.indw.length) {
+      ctx.fillStyle = "#555"; ctx.font = "26px Arial, sans-serif";
+      for (const l of b.indw) { ctx.fillText(l, M, y + 20); y += 32; }
+    }
+    y += 16;
+  }
+}
+
+function contactoLote(pedidos, subtitulo) {
+  const cab = `🛵 ${subtitulo || "Repartidor"} — ${fmtFecha(state.fecha)} — ${pedidos.length} pedido${pedidos.length === 1 ? "" : "s"}`;
+  const bloques = pedidos.map((p) => {
+    const cobro = p.metodo_pago === "Efectivo"
+      ? `Cobrar ${money(p.total)}${_pagaConTexto(p) ? " (paga con " + _pagaConTexto(p) + ")" : ""}`
+      : `Pagado (${p.metodo_pago})`;
+    return [
+      `${p.numero != null ? "N° " + p.numero : "#" + p.id} — ${p.cliente_nombre || "(sin nombre)"}`,
+      p.cliente_telefono ? "Tel: " + p.cliente_telefono : "",
+      p.cliente_direccion || "",
+      p.indicaciones ? "(" + p.indicaciones + ")" : "",
+      p.cliente_direccion ? googleMapsSearchLink(p.cliente_direccion) : "",
+      cobro,
+    ].filter(Boolean).join("\n");
+  });
+  return cab + "\n\n" + bloques.join("\n————————\n");
+}
+
+function openTicketLote(pedidos, titulo, opts = {}) {
+  if (!pedidos || !pedidos.length) { toast("Ese repartidor no tiene pedidos para el ticket.", "info"); return; }
+  _ticketPedido = null;
+  _ticketLote = pedidos;
+  _ticketSubtitulo = titulo;
+  $("ticket-title").textContent = "Ticket — " + titulo;
+  drawTicketLote(pedidos, titulo);
+  // Botones: en lote no aplican WhatsApp-cliente ni "Ruta optimizada" (son por
+  // pedido). Maps se muestra solo si viene el link de la ruta óptima del grupo.
+  $("ticket-contacto").style.display = "";
+  $("ticket-contacto").textContent = "👤 Copiar contactos";
+  $("ticket-copiar").textContent = "📋 Copiar imagen";
+  $("ticket-wa").style.display = "none";
+  $("ticket-ruta").style.display = "none";
+  if (opts.maps_link) {
+    $("ticket-maps").style.display = "";
+    $("ticket-maps").href = opts.maps_link;
+    $("ticket-maps").textContent = "🗺️ Ver ruta en Maps";
+  } else {
+    $("ticket-maps").style.display = "none";
+  }
+  $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos y direcciones de todos los pedidos.";
+  $("modal-ticket").classList.add("show");
 }
 
 $("ticket-cerrar").addEventListener("click", () => $("modal-ticket").classList.remove("show"));
@@ -1228,17 +1425,22 @@ $("ticket-copiar").addEventListener("click", async () => {
 });
 
 $("ticket-contacto").addEventListener("click", async () => {
-  const p = _ticketPedido;
-  if (!p) return;
-  const texto = [
-    p.cliente_nombre,
-    p.cliente_telefono ? "Tel: " + p.cliente_telefono : "",
-    p.cliente_direccion,
-    p.cliente_direccion ? googleMapsSearchLink(p.cliente_direccion) : "",
-  ].filter(Boolean).join("\n");
+  let texto;
+  if (_ticketLote) {
+    texto = contactoLote(_ticketLote, _ticketSubtitulo);
+  } else {
+    const p = _ticketPedido;
+    if (!p) return;
+    texto = [
+      p.cliente_nombre,
+      p.cliente_telefono ? "Tel: " + p.cliente_telefono : "",
+      p.cliente_direccion,
+      p.cliente_direccion ? googleMapsSearchLink(p.cliente_direccion) : "",
+    ].filter(Boolean).join("\n");
+  }
   try {
     await navigator.clipboard.writeText(texto);
-    $("ticket-contacto").textContent = "✅ Contacto copiado";
+    $("ticket-contacto").textContent = _ticketLote ? "✅ Contactos copiados" : "✅ Contacto copiado";
   } catch (e) {
     toast("No se pudo copiar el contacto al portapapeles.", "error");
   }
@@ -1260,6 +1462,48 @@ $("ticket-ruta").addEventListener("click", async () => {
     btn.textContent = "🗺️ Ruta optimizada";
   }
 });
+
+// ---- Entrada general del ticket combinado (independiente del mapa) ---------
+// Agrupa los envíos pendientes de salir por repartidor asignado.
+function pedidosPendientesPorRepartidor() {
+  const map = new Map();
+  for (const p of state.pedidos) {
+    if (p.tipo !== "Envío" || p.anulado || p.hora_salida) continue;
+    const rep = (p.repartidor || "").trim();
+    if (!rep) continue;
+    if (!map.has(rep)) map.set(rep, []);
+    map.get(rep).push(p);
+  }
+  return map;
+}
+
+$("btn-ticket-repartidor").addEventListener("click", () => {
+  const porRep = pedidosPendientesPorRepartidor();
+  if (porRep.size === 0) {
+    toast("No hay envíos pendientes con repartidor asignado. Asigná un repartidor primero.", "info");
+    return;
+  }
+  if (porRep.size === 1) {
+    const [rep, peds] = [...porRep][0];
+    openTicketLote(peds, "Repartidor " + rep);
+    return;
+  }
+  const cont = $("ticket-rep-list");
+  cont.innerHTML = "";
+  for (const [rep, peds] of porRep) {
+    const b = document.createElement("button");
+    b.className = "btn secondary";
+    b.style.cssText = "display:block;width:100%;text-align:left;margin:.35rem 0;";
+    b.textContent = `🛵 ${rep} — ${peds.length} pedido${peds.length === 1 ? "" : "s"}`;
+    b.addEventListener("click", () => {
+      $("modal-ticket-rep").classList.remove("show");
+      openTicketLote(peds, "Repartidor " + rep);
+    });
+    cont.appendChild(b);
+  }
+  $("modal-ticket-rep").classList.add("show");
+});
+$("ticket-rep-cancel").addEventListener("click", () => $("modal-ticket-rep").classList.remove("show"));
 
 // --------------------------------------------------------------- resumen
 const resumenDetails = $("resumen-details");
