@@ -61,6 +61,17 @@ automáticamente. Al arrancar:
   ítems con precio autocompletado según método de pago (editable), envío por
   defecto $3000 con toggle "no cobrar", descuento por cliente, **total siempre
   autocalculado** (ítems + envío − descuento).
+- **Pegar mensaje de WhatsApp:** pegás el mensaje del cliente y se **prellena**
+  el formulario (cliente, dirección, teléfono, ítems y medio de pago) con
+  reglas contra la Carta (sin IA). Separa las **aclaraciones** (piso, depto,
+  timbre…) de la dirección y las manda a Indicaciones. Muestra un resumen de lo
+  detectado y avisa lo que falta (nombre, medio de pago, dirección, teléfono).
+  Acierta lo evidente; se revisa y corrige antes de guardar (y al guardar avisa
+  si faltan datos críticos). El cliente nuevo se da de alta solo al guardar.
+- **Ticket combinado por repartidor:** cuando un repartidor lleva varios
+  pedidos, genera **una sola imagen** y **un solo mensaje de contacto** con los
+  datos de todos, desde el botón "Ticket por repartidor" o desde cada grupo de
+  "Optimizar rutas" (con el orden óptimo y el link de la ruta).
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Alertas de demora:** pedidos sin salir pasados X minutos y sin facturar
