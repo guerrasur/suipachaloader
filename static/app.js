@@ -485,33 +485,77 @@ function _detectarTelefono(lineas) {
 // Palabras que marcan una aclaración de entrega (van a Indicaciones, no a la
 // dirección). Se dejan afuera "entre"/"esquina" porque ayudan a ubicar la calle.
 const _KW_INDIC = /\b(pisos?|depto|dpto|dto|departamento|timbre|portero|porteria|planta baja|pb|fondo|contrafrente|interno)\b/i;
+// Instrucciones de entrega ("que me llamen al...", "avisen cuando...") que no
+// son parte del domicilio aunque vengan pegadas en la misma línea.
+const _KW_INSTRUCCION = /\b(llam[ae]|llamen|avis[ae]|avisen|toc[ae]|tocar|subir|bajar|buscar|buscarlo|buscarla|esperar|esperan|cuando|porfa|por favor)\b/i;
 
 // Separa el domicilio de sus aclaraciones. Devuelve {direccion, indicaciones}.
-// Divide por comas y, dentro de una parte sin coma ("Suipacha 1234 piso 3"),
-// corta en la primera palabra de aclaración.
+// Divide por comas (y por " - ", común cuando el cliente agrega una instrucción
+// después del domicilio) y, dentro de una parte sin separador ("Suipacha 1234
+// piso 3"), corta en la primera palabra de aclaración. La primera parte siempre
+// se toma como domicilio; las siguientes van a indicaciones salvo que sumen
+// información de calle ("entre X e Y" o "calle + altura").
 function _partirDireccion(linea) {
+  const partes = linea.split(/,| - /).map((s) => s.trim()).filter(Boolean);
   const dir = [], ind = [];
-  for (const parte of linea.split(",").map((s) => s.trim()).filter(Boolean)) {
+  partes.forEach((parte, i) => {
     const m = parte.match(_KW_INDIC);
-    if (!m) { dir.push(parte); continue; }
-    if (m.index <= 2) { ind.push(parte); continue; } // toda la parte es aclaración
-    dir.push(parte.slice(0, m.index).trim());          // "Suipacha 1234"
-    ind.push(parte.slice(m.index).trim());             // "piso 3"
-  }
+    if (m) {
+      if (m.index <= 2) { ind.push(parte); return; } // toda la parte es aclaración
+      dir.push(parte.slice(0, m.index).trim());        // "Suipacha 1234"
+      ind.push(parte.slice(m.index).trim());           // "piso 3"
+      return;
+    }
+    if (i === 0) { dir.push(parte); return; }
+    if (_KW_INSTRUCCION.test(parte)) { ind.push(parte); return; }
+    if (/\b(entre|esquina)\b/i.test(parte) || /[a-záéíóúñ]{3,}\s+\d{2,5}/i.test(parte)) {
+      dir.push(parte); return;
+    }
+    ind.push(parte);
+  });
   let direccion = dir.filter(Boolean).join(", ");
   const indicaciones = ind.filter(Boolean).join(", ");
   if (!direccion) direccion = linea; // si todo pareció aclaración, no perder el dato
   return { direccion, indicaciones: direccion === linea ? "" : indicaciones };
 }
 
-// Devuelve {resto, valor} si la línea empieza con "etiqueta:" (o "etiqueta -").
-function _campoEtiquetado(linea, etiquetas) {
-  const m = linea.match(/^\s*([a-záéíóúñ. ]+?)\s*[:\-]\s*(.+)$/i);
+// "Venezuela 151 6b" -> {direccion: "Venezuela 151", indicacion: "6b"}. Corta
+// un token corto (piso/depto abreviado tipo "6b", "2do") pegado al final de una
+// calle+altura ya identificada.
+function _separarUnidad(direccion) {
+  const m = direccion.match(/^([a-záéíóúñ0-9°ºª.\s]*?\d{1,5})\s+([0-9]{1,3}[a-z]{1,2}|[a-z]{1,2}[0-9]{1,3})$/i);
+  if (!m) return { direccion, indicacion: "" };
+  return { direccion: m[1].trim(), indicacion: m[2].trim() };
+}
+
+// Etiqueta al inicio de línea, como campo clásico ("Dirección: Suipacha 123")
+// o en negrita estilo plantilla de WhatsApp sin dos puntos ("*Dirección y
+// aclaraciones* Suipacha 123"). Devuelve {clave, resto} o null.
+function _extraerEtiqueta(linea) {
+  let m = linea.match(/^\s*\*\s*([a-záéíóúñ. ]+?)\s*\*\s*[:\-]?\s*(.*)$/i);
+  if (!m) m = linea.match(/^\s*([a-záéíóúñ. ]+?)\s*[:\-]\s*(.+)$/i);
   if (!m) return null;
-  const clave = _norm(m[1]);
-  if (etiquetas.some((e) => clave === e || clave.startsWith(e))) return m[2].trim();
+  return { clave: _norm(m[1]), resto: m[2].trim() };
+}
+
+// Devuelve el valor si la línea empieza con una de las `etiquetas` (ver
+// _extraerEtiqueta), o null si no matchea ninguna.
+function _campoEtiquetado(linea, etiquetas) {
+  const e = _extraerEtiqueta(linea);
+  if (!e) return null;
+  if (etiquetas.some((et) => e.clave === et || e.clave.startsWith(et))) return e.resto;
   return null;
 }
+
+// Encabezados de la plantilla que le pedimos al cliente por WhatsApp
+// ("Ensaladas y cantidades", "Especificaciones", "Medio de pago") que no
+// mapean a un campo propio: si quedan sueltos (por ejemplo en negrita, sin
+// dato adjunto) hay que descartarlos para que no contaminen la heurística de
+// nombre/dirección.
+const _HEADERS_IGNORAR = [
+  "ensaladas y cantidades", "platos y cantidades", "productos y cantidades",
+  "especificaciones", "especificacion", "medio de pago",
+];
 
 // Quita el prefijo que WhatsApp agrega en cada línea al copiar/exportar una
 // conversación ("[12:15 p.m., 23/7/2026] Nombre:" o "23/7/2026, 12:15 - Nombre:").
@@ -547,6 +591,16 @@ function _nombreDeRemitente(remitente) {
   return n || null;
 }
 
+// Dirección guardada en el nombre de contacto de WhatsApp ("Santiago //
+// Venezuela 151 6b" -> "Venezuela 151 6b"). Se usa solo como último recurso,
+// cuando el mensaje no trae dirección propia (p. ej. el cliente ya la había
+// mandado en otra ocasión y ahora solo escribe el pedido).
+function _direccionDeRemitente(remitente) {
+  if (!remitente || !remitente.includes("//")) return null;
+  const resto = remitente.split("//").slice(1).join("//").trim();
+  return /\d/.test(resto) ? resto : null; // sin número no parece una dirección
+}
+
 // Núcleo del parser. `platos` es state.platos (se filtran los del día).
 function parseMensajeWhatsApp(texto, platos) {
   const limpio = _limpiarWhatsApp(texto);
@@ -568,10 +622,12 @@ function parseMensajeWhatsApp(texto, platos) {
   for (const l of lineas) {
     const nom = _campoEtiquetado(l, ["nombre", "cliente"]);
     const dir = _campoEtiquetado(l, ["direccion", "dir", "domicilio", "direc"]);
-    const ind = _campoEtiquetado(l, ["timbre", "piso", "depto", "dpto", "indicaciones", "aclaracion", "aclaraciones", "referencia"]);
+    const ind = _campoEtiquetado(l, ["timbre", "piso", "depto", "dpto", "indicaciones", "aclaracion", "aclaraciones", "referencia", "especificaciones", "especificacion"]);
     if (nom) { res.nombre = res.nombre || nom; continue; }
     if (dir) { res.direccion = res.direccion || dir; continue; }
     if (ind) { indics.push(ind); continue; }
+    const etq = _extraerEtiqueta(l);
+    if (etq && _HEADERS_IGNORAR.includes(etq.clave)) continue; // encabezado de plantilla sin dato propio
     lineasLibres.push(l);
   }
 
@@ -620,10 +676,17 @@ function parseMensajeWhatsApp(texto, platos) {
     }
     if (mejorDir) res.direccion = mejorDir;
   }
-  // Sacar una preposición inicial de la dirección ("Para Venezuela 151" ->
-  // "Venezuela 151").
+  // Último recurso: la dirección guardada en el nombre de contacto de
+  // WhatsApp (típico cuando el cliente ya mandó la dirección otra vez y en
+  // este mensaje solo pide el plato).
+  if (!res.direccion) {
+    const dirRem = _direccionDeRemitente(limpio.remitente);
+    if (dirRem) res.direccion = dirRem;
+  }
+  // Sacar una preposición o muletilla inicial de la dirección ("Para
+  // Venezuela 151" -> "Venezuela 151", "es 25 de mayo 359" -> "25 de mayo 359").
   if (res.direccion) {
-    res.direccion = res.direccion.replace(/^\s*(para|pa|a|en|direccion|direc|dir)\b[\s:]*/i, "").trim();
+    res.direccion = res.direccion.replace(/^\s*(para|pa|a|en|es|direccion|direc|dir)\b[\s:]*/i, "").trim();
   }
 
   // Nombre: si no vino etiquetado, usar el remitente de WhatsApp (fuerte); si no,
@@ -645,9 +708,12 @@ function parseMensajeWhatsApp(texto, platos) {
     }
   }
 
-  // Separar la dirección de sus aclaraciones (piso/depto/timbre → Indicaciones),
-  // venga etiquetada o por heurística. Lo extraído se suma a las indicaciones.
+  // Separar la dirección de sus aclaraciones (piso/depto/timbre/instrucciones
+  // de entrega → Indicaciones), venga etiquetada o por heurística. Lo
+  // extraído se suma a las indicaciones.
   if (res.direccion) {
+    const unidad = _separarUnidad(res.direccion);
+    if (unidad.indicacion) { res.direccion = unidad.direccion; indics.push(unidad.indicacion); }
     const partida = _partirDireccion(res.direccion);
     res.direccion = partida.direccion;
     if (partida.indicaciones) indics.push(partida.indicaciones);
@@ -660,6 +726,33 @@ function parseMensajeWhatsApp(texto, platos) {
   if (!res.metodo_pago) res.faltantes.push("medio de pago");
   if (!res.direccion) res.faltantes.push("dirección");
   if (!res.telefono) res.faltantes.push("teléfono (opcional)");
+  return res;
+}
+
+// Si el cliente ya está en la base (coincide el nombre), completa los datos
+// que el mensaje no trajo (típicamente el teléfono, que casi nunca se repite
+// en cada pedido) con lo que ya tenemos guardado. `res.sugeridoDeFicha` lista
+// los campos completados así, para avisar en el reporte que conviene revisarlos.
+async function completarConClienteExistente(res) {
+  res.sugeridoDeFicha = [];
+  if (!res.nombre) return res;
+  let candidatos;
+  try {
+    candidatos = await api("/api/clientes?q=" + encodeURIComponent(res.nombre));
+  } catch {
+    return res; // sin conexión o error de red: seguimos solo con lo parseado
+  }
+  const nNorm = _norm(res.nombre);
+  const match = candidatos.find((c) => _norm(c.nombre) === nNorm) || (candidatos.length === 1 ? candidatos[0] : null);
+  if (!match) return res;
+  if (!res.telefono && match.telefono) { res.telefono = match.telefono; res.sugeridoDeFicha.push("telefono"); }
+  if (!res.direccion && match.direccion) { res.direccion = match.direccion; res.sugeridoDeFicha.push("direccion"); }
+  if (!res.indicaciones && match.indicaciones) { res.indicaciones = match.indicaciones; res.sugeridoDeFicha.push("indicaciones"); }
+  res.faltantes = res.faltantes.filter((f) => {
+    if (f.startsWith("teléfono") && res.telefono) return false;
+    if (f === "dirección" && res.direccion) return false;
+    return true;
+  });
   return res;
 }
 
@@ -693,13 +786,17 @@ function aplicarParseWA(res) {
 function renderReporteWA(res) {
   const cont = $("wa-report");
   const filas = [];
-  const ok = (t, v) => filas.push(`<div class="wa-line"><span class="wa-ok">✓</span><span>${escapeHtml(t)}</span><span class="wa-val">${escapeHtml(v)}</span></div>`);
+  const sugerido = res.sugeridoDeFicha || [];
+  const ok = (t, v, campo) => {
+    const nota = campo && sugerido.includes(campo) ? " (de ficha existente, revisar)" : "";
+    filas.push(`<div class="wa-line"><span class="wa-ok">✓</span><span>${escapeHtml(t)}</span><span class="wa-val">${escapeHtml(v)}${escapeHtml(nota)}</span></div>`);
+  };
   if (res.nombre) ok("Cliente:", res.nombre);
-  if (res.direccion) ok("Dirección:", res.direccion);
-  if (res.telefono) ok("Teléfono:", res.telefono);
+  if (res.direccion) ok("Dirección:", res.direccion, "direccion");
+  if (res.telefono) ok("Teléfono:", res.telefono, "telefono");
   if (res.items.length) ok("Ítems:", res.items.map((i) => `${i.cantidad}× ${i.nombre}`).join(", "));
   if (res.metodo_pago) ok("Pago:", res.metodo_pago + (res.paga_con ? ` (paga con ${res.paga_con})` : ""));
-  if (res.indicaciones) ok("Indicaciones:", res.indicaciones);
+  if (res.indicaciones) ok("Indicaciones:", res.indicaciones, "indicaciones");
   for (const f of res.faltantes) {
     filas.push(`<div class="wa-line"><span class="wa-falta">⚠</span><span class="wa-falta">Falta ${escapeHtml(f)}</span></div>`);
   }
@@ -707,10 +804,11 @@ function renderReporteWA(res) {
   cont.classList.remove("hidden");
 }
 
-$("wa-parse").addEventListener("click", () => {
+$("wa-parse").addEventListener("click", async () => {
   const texto = $("wa-text").value;
   if (!texto.trim()) { toast("Pegá primero el mensaje del cliente.", "info"); return; }
   const res = parseMensajeWhatsApp(texto, state.platos);
+  await completarConClienteExistente(res);
   aplicarParseWA(res);
   renderReporteWA(res);
   const n = res.items.length;
