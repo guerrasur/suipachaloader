@@ -65,10 +65,13 @@ automáticamente. Al arrancar:
   pegar el **chat exportado**, con los `[hora, fecha] Nombre:` de cada línea) y
   se **prellena** el formulario (cliente, dirección, teléfono, ítems y medio de
   pago) con reglas contra la Carta (sin IA). Separa las **aclaraciones** (piso, depto,
-  timbre…) de la dirección y las manda a Indicaciones. Muestra un resumen de lo
-  detectado y avisa lo que falta (nombre, medio de pago, dirección, teléfono).
-  Acierta lo evidente; se revisa y corrige antes de guardar (y al guardar avisa
-  si faltan datos críticos). El cliente nuevo se da de alta solo al guardar.
+  timbre, instrucciones de entrega…) de la dirección y las manda a Indicaciones.
+  Si el nombre detectado coincide con un cliente ya cargado, **completa
+  teléfono/dirección/indicaciones faltantes con los de su ficha** (marcado en
+  el resumen para revisar). Muestra un resumen de lo detectado y avisa lo que
+  falta (nombre, medio de pago, dirección, teléfono). Acierta lo evidente; se
+  revisa y corrige antes de guardar (y al guardar avisa si faltan datos
+  críticos). El cliente nuevo se da de alta solo al guardar.
 - **Ticket combinado por repartidor:** cuando un repartidor lleva varios
   pedidos, genera **una sola imagen** y **un solo mensaje de contacto** con los
   datos de todos, desde el botón "Ticket por repartidor" o desde cada grupo de
