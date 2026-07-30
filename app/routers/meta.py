@@ -16,7 +16,7 @@ from ..excel_export import (
     nombre_archivo,
     nombre_archivo_dia,
 )
-from ..models import Pedido, PlatoDia, RepartidorDia
+from ..models import Pedido, PlatoDia, PlatoDiaItem, RepartidorDia
 from ..schemas import ConfigIn, PlatoDiaIn, RepartidoresDiaIn
 
 router = APIRouter(prefix="/api", tags=["meta"])
@@ -184,7 +184,28 @@ def set_repartidores_dia(
     return {"fecha": fecha.isoformat(), "nombres": nombres}
 
 
-# --- Plato del día ----------------------------------------------------------
+# --- Plato del día -----------------------------------------------------------
+def _items_dia(db: Session, fecha: date) -> list[PlatoDiaItem]:
+    return (
+        db.query(PlatoDiaItem)
+        .filter(PlatoDiaItem.fecha == fecha)
+        .order_by(PlatoDiaItem.id)
+        .all()
+    )
+
+
+def _serializar_items(items: list[PlatoDiaItem]) -> list[dict]:
+    return [
+        {
+            "id": i.id,
+            "nombre": i.nombre,
+            "precio_efectivo": i.precio_efectivo,
+            "precio_lista": i.precio_lista,
+        }
+        for i in items
+    ]
+
+
 @router.get("/plato-del-dia")
 def get_plato_dia(fecha: date | None = None, db: Session = Depends(get_db)):
     fecha = fecha or date.today()
@@ -193,9 +214,7 @@ def get_plato_dia(fecha: date | None = None, db: Session = Depends(get_db)):
         "fecha": fecha.isoformat(),
         "definido": row is not None,  # si ya se respondió para ese día
         "hay": bool(row.hay) if row else False,
-        "nombre": row.nombre if row else "",
-        "precio_efectivo": row.precio_efectivo if row else 0.0,
-        "precio_lista": row.precio_lista if row else 0.0,
+        "items": _serializar_items(_items_dia(db, fecha)),
     }
 
 
@@ -203,24 +222,38 @@ def get_plato_dia(fecha: date | None = None, db: Session = Depends(get_db)):
 def set_plato_dia(
     data: PlatoDiaIn, fecha: date | None = None, db: Session = Depends(get_db)
 ):
-    """Define el plato del día de la fecha (o marca que ese día no hay)."""
+    """Define el/los plato/s del día de la fecha (o marca que ese día no hay).
+
+    Reemplaza siempre la lista completa de platos por la enviada (mismo
+    patrón que repartidores-dia)."""
     fecha = fecha or date.today()
     row = db.get(PlatoDia, fecha)
     if row is None:
         row = PlatoDia(fecha=fecha)
         db.add(row)
     row.hay = data.hay
-    row.nombre = data.nombre.strip()
-    row.precio_efectivo = max(0.0, data.precio_efectivo)
-    row.precio_lista = max(0.0, data.precio_lista)
+
+    db.query(PlatoDiaItem).filter(PlatoDiaItem.fecha == fecha).delete()
+    nuevos = []
+    if data.hay:
+        for it in data.items:
+            nombre = it.nombre.strip()
+            if not nombre:
+                continue
+            nuevo = PlatoDiaItem(
+                fecha=fecha,
+                nombre=nombre,
+                precio_efectivo=max(0.0, it.precio_efectivo),
+                precio_lista=max(0.0, it.precio_lista),
+            )
+            db.add(nuevo)
+            nuevos.append(nuevo)
     db.commit()
     return {
         "fecha": fecha.isoformat(),
         "definido": True,
         "hay": row.hay,
-        "nombre": row.nombre,
-        "precio_efectivo": row.precio_efectivo,
-        "precio_lista": row.precio_lista,
+        "items": _serializar_items(nuevos),
     }
 
 

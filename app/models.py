@@ -145,16 +145,27 @@ class GeocodeCache(Base):
 
 
 class PlatoDia(Base):
-    """Plato del día para una fecha (o marca de que ese día no hay).
+    """Estado del plato del día para una fecha (o marca de que ese día no hay).
 
     Se define al iniciar el día. ``hay=False`` significa que ese día no hay
-    plato del día. Cuando existe la fila, el día ya fue respondido.
+    plato del día. Cuando existe la fila, el día ya fue respondido. Los
+    platos ofrecidos ese día (puede haber más de uno) están en
+    ``PlatoDiaItem``.
     """
 
     __tablename__ = "plato_dia"
 
     fecha: Mapped[date] = mapped_column(Date, primary_key=True)
     hay: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PlatoDiaItem(Base):
+    """Un plato del día ofrecido en una fecha (puede haber más de uno)."""
+
+    __tablename__ = "plato_dia_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[date] = mapped_column(Date, index=True)
     nombre: Mapped[str] = mapped_column(String, default="")
     precio_efectivo: Mapped[float] = mapped_column(Float, default=0.0)
     precio_lista: Mapped[float] = mapped_column(Float, default=0.0)

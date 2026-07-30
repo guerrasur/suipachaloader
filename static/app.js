@@ -58,7 +58,7 @@ const state = {
   filtro: "todos",
   pedidos: [],
   repartidoresDia: [],
-  platoDia: { definido: false, hay: false, nombre: "", precio_efectivo: 0, precio_lista: 0 },
+  platoDia: { definido: false, hay: false, items: [] },
 };
 
 // Precio "de los demás platos" para usar como default del plato del día:
@@ -106,14 +106,18 @@ function precioSegunMetodo(plato) {
 
 function addItem(pdd = false) {
   if (pdd) {
-    // Se precarga con el plato del día definido para la fecha (nombre y
-    // precio según método), pero nombre y precio quedan editables.
-    const d = state.platoDia;
-    const ef = d.hay && d.precio_efectivo ? d.precio_efectivo : 0;
-    const li = d.hay && d.precio_lista ? d.precio_lista : 0;
+    // Se precarga con el plato del día elegido para la fecha (nombre y
+    // precio según método), pero nombre y precio quedan editables. Si hay
+    // más de un plato del día cargado, se usa el elegido en el selector.
+    const items = state.platoDia.hay ? state.platoDia.items : [];
+    let elegido = null;
+    if (items.length === 1) elegido = items[0];
+    else if (items.length > 1) elegido = items[+$("pdd-elegir").value] || items[0];
+    const ef = elegido ? elegido.precio_efectivo : 0;
+    const li = elegido ? elegido.precio_lista : 0;
     state.items.push({
       plato_id: null,
-      nombre: d.hay ? d.nombre : "",
+      nombre: elegido ? elegido.nombre : "",
       precio_efectivo: ef,   // se usan para reaplicar precio al cambiar método
       precio_lista: li,
       precio_unitario: $("f-pago").value === "Efectivo" ? ef : li,
@@ -370,8 +374,14 @@ function resetForm() {
   $("f-envio").value = _cfgCache ? _cfgCache.costo_envio_default : 3000;
   $("form-title").textContent = "📝 Nuevo pedido";
   $("btn-guardar").textContent = "Guardar pedido";
-  fillRepartidorSelect($("f-repartidor"), "");
+  fillRepartidorSelect($("f-repartidor"), repartidorDefault());
   renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla(); checkHoraLimite();
+}
+
+// Si hay un único repartidor cargado para el día, se propone por defecto en
+// pedidos nuevos (no pisa una edición en curso ni una elección ya hecha).
+function repartidorDefault() {
+  return state.repartidoresDia.length === 1 ? state.repartidoresDia[0] : "";
 }
 
 // ------------------------------------------------------- cliente autocomplete
@@ -825,7 +835,8 @@ $("wa-clear").addEventListener("click", () => {
 async function loadRepartidoresDia() {
   const r = await api("/api/repartidores-dia?fecha=" + state.fecha);
   state.repartidoresDia = r.nombres;
-  fillRepartidorSelect($("f-repartidor"), $("f-repartidor").value);
+  const actual = $("f-repartidor").value || (state.editId ? "" : repartidorDefault());
+  fillRepartidorSelect($("f-repartidor"), actual);
   const lbl = $("rep-dia-label");
   lbl.textContent = r.nombres.length ? r.nombres.join(" / ") : "Repartidores";
 }
@@ -997,36 +1008,103 @@ function renderRutas(r) {
 }
 
 // -------------------------------------------------------- plato del día (día)
+// Puede haber más de un plato del día en la misma fecha (state.platoDia.items).
 async function loadPlatoDia() {
   const d = await api("/api/plato-del-dia?fecha=" + state.fecha);
   state.platoDia = d;
+  const items = d.hay ? d.items : [];
   const lbl = $("pdd-dia-label");
-  if (d.definido && d.hay) lbl.textContent = d.nombre || "Plato del día";
-  else if (d.definido && !d.hay) lbl.textContent = "Sin plato del día";
-  else lbl.textContent = "Plato del día";
-  // El botón "+ Plato del día" del formulario refleja el del día.
-  $("add-pdd").textContent = (d.definido && d.hay && d.nombre)
-    ? `+ ${d.nombre}` : "+ Plato del día";
+  if (d.definido && d.hay && items.length) {
+    lbl.textContent = items.length === 1 ? items[0].nombre : `${items.length} platos`;
+  } else if (d.definido && !d.hay) {
+    lbl.textContent = "Sin plato del día";
+  } else {
+    lbl.textContent = "Plato del día";
+  }
+  // El botón "+ Plato del día" del formulario refleja el/los del día; si hay
+  // más de uno, se muestra un selector al lado para elegir cuál agregar.
+  $("add-pdd").textContent = items.length === 1 ? `+ ${items[0].nombre}` : "+ Plato del día";
+  const sel = $("pdd-elegir");
+  if (items.length > 1) {
+    sel.innerHTML = items.map((it, i) => `<option value="${i}">${escapeHtml(it.nombre)}</option>`).join("");
+    sel.classList.remove("hidden");
+  } else {
+    sel.classList.add("hidden");
+  }
 }
 
 $("btn-plato-dia").addEventListener("click", openPddModal);
 $("pdd-hay").addEventListener("change", () => {
   $("pdd-campos").style.display = $("pdd-hay").checked ? "" : "none";
 });
-$("pdd-igualar").addEventListener("click", () => {
-  const def = precioDefaultPlatos();
-  $("pdd-ef").value = def.ef;
-  $("pdd-li").value = def.li;
+
+// Filas editables del modal (independiente de state.platoDia hasta guardar).
+let pddEdit = [];
+
+function renderPddItems() {
+  const cont = $("pdd-items");
+  cont.innerHTML = "";
+  pddEdit.forEach((it, idx) => {
+    const row = document.createElement("div");
+    row.className = "pdd-item-row";
+    row.innerHTML = `
+      <div class="field" style="margin-bottom:.6rem;">
+        <label>Nombre del plato del día</label>
+        <input data-idx="${idx}" class="pdd-nombre" placeholder="Ej: Milanesa con puré" autocomplete="off" value="${escapeAttr(it.nombre)}" />
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Precio efectivo</label>
+          <input type="number" data-idx="${idx}" class="pdd-ef" step="100" value="${it.precio_efectivo}" />
+        </div>
+        <div class="field">
+          <label>Precio lista</label>
+          <input type="number" data-idx="${idx}" class="pdd-li" step="100" value="${it.precio_lista}" />
+        </div>
+        <div class="field" style="justify-content:flex-end;">
+          <button type="button" class="btn ghost sm pdd-igualar" data-idx="${idx}">= que los demás</button>
+        </div>
+        ${pddEdit.length > 1 ? `<div class="field" style="justify-content:flex-end;">
+          <button type="button" class="btn ghost sm pdd-quitar" data-idx="${idx}" title="Quitar">✕</button>
+        </div>` : ""}
+      </div>`;
+    cont.appendChild(row);
+  });
+  cont.querySelectorAll(".pdd-nombre").forEach((s) =>
+    s.addEventListener("input", (e) => { pddEdit[+e.target.dataset.idx].nombre = e.target.value; })
+  );
+  cont.querySelectorAll(".pdd-ef").forEach((s) =>
+    s.addEventListener("input", (e) => { pddEdit[+e.target.dataset.idx].precio_efectivo = +e.target.value || 0; })
+  );
+  cont.querySelectorAll(".pdd-li").forEach((s) =>
+    s.addEventListener("input", (e) => { pddEdit[+e.target.dataset.idx].precio_lista = +e.target.value || 0; })
+  );
+  cont.querySelectorAll(".pdd-igualar").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      const def = precioDefaultPlatos();
+      pddEdit[+e.currentTarget.dataset.idx].precio_efectivo = def.ef;
+      pddEdit[+e.currentTarget.dataset.idx].precio_lista = def.li;
+      renderPddItems();
+    })
+  );
+  cont.querySelectorAll(".pdd-quitar").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      pddEdit.splice(+e.currentTarget.dataset.idx, 1);
+      renderPddItems();
+    })
+  );
+}
+
+$("pdd-agregar").addEventListener("click", () => {
+  pddEdit.push({ nombre: "", precio_efectivo: 0, precio_lista: 0 });
+  renderPddItems();
 });
+
 $("pdd-save").addEventListener("click", async () => {
   const hay = $("pdd-hay").checked;
-  const body = {
-    hay,
-    nombre: hay ? $("pdd-nombre").value.trim() : "",
-    precio_efectivo: hay ? (+$("pdd-ef").value || 0) : 0,
-    precio_lista: hay ? (+$("pdd-li").value || 0) : 0,
-  };
-  if (hay && !body.nombre) return toast("Poné el nombre del plato del día (o destildá \"Hoy hay plato del día\").", "error");
+  const items = hay ? pddEdit.filter((it) => it.nombre.trim()) : [];
+  if (hay && !items.length) return toast("Poné el nombre de al menos un plato del día (o destildá \"Hoy hay plato del día\").", "error");
+  const body = { hay, items };
   await api("/api/plato-del-dia?fecha=" + state.fecha, { method: "PUT", body: JSON.stringify(body) });
   $("modal-pdd").classList.remove("show");
   await loadPlatoDia();
@@ -1040,9 +1118,10 @@ function openPddModal() {
   const def = precioDefaultPlatos();
   $("pdd-hay").checked = d.definido ? d.hay : true;
   $("pdd-campos").style.display = $("pdd-hay").checked ? "" : "none";
-  $("pdd-nombre").value = d.nombre || "";
-  $("pdd-ef").value = d.hay && d.precio_efectivo ? d.precio_efectivo : def.ef;
-  $("pdd-li").value = d.hay && d.precio_lista ? d.precio_lista : def.li;
+  pddEdit = d.hay && d.items.length
+    ? d.items.map((it) => ({ nombre: it.nombre, precio_efectivo: it.precio_efectivo, precio_lista: it.precio_lista }))
+    : [{ nombre: "", precio_efectivo: def.ef, precio_lista: def.li }];
+  renderPddItems();
   $("modal-pdd").classList.add("show");
 }
 
