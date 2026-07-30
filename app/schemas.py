@@ -197,11 +197,18 @@ class RepartidoresDiaIn(BaseModel):
     nombres: list[str] = []  # 1 o 2 nombres; vacíos se ignoran
 
 
-class PlatoDiaIn(BaseModel):
-    hay: bool = True  # False = ese día no hay plato del día
+class PlatoDiaItemIn(BaseModel):
     nombre: str = ""
     precio_efectivo: float = 0.0
     precio_lista: float = 0.0
+
+    _v_ef = field_validator("precio_efectivo")(_no_negativo)
+    _v_li = field_validator("precio_lista")(_no_negativo)
+
+
+class PlatoDiaIn(BaseModel):
+    hay: bool = True  # False = ese día no hay plato del día
+    items: list[PlatoDiaItemIn] = []  # puede haber más de un plato del día
 
 
 class ConfigIn(BaseModel):

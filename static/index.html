@@ -117,6 +117,7 @@
               <div class="row" style="margin-top:.4rem;">
                 <button type="button" class="btn secondary sm" id="add-item">+ Agregar plato</button>
                 <button type="button" class="btn ghost sm" id="add-pdd">+ Plato del día</button>
+                <select id="pdd-elegir" class="hidden" title="Elegí cuál plato del día agregar"></select>
               </div>
             </div>
           </div>
@@ -330,25 +331,10 @@
         <input type="checkbox" id="pdd-hay" checked /> Hoy hay plato del día
       </label>
       <div id="pdd-campos">
-        <div class="field" style="margin-bottom:.6rem;">
-          <label>Nombre del plato del día</label>
-          <input id="pdd-nombre" placeholder="Ej: Milanesa con puré" autocomplete="off" />
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Precio efectivo</label>
-            <input type="number" id="pdd-ef" step="100" />
-          </div>
-          <div class="field">
-            <label>Precio lista</label>
-            <input type="number" id="pdd-li" step="100" />
-          </div>
-          <div class="field" style="justify-content:flex-end;">
-            <button type="button" class="btn ghost sm" id="pdd-igualar">= que los demás platos</button>
-          </div>
-        </div>
+        <div id="pdd-items"></div>
+        <button type="button" class="btn ghost sm" id="pdd-agregar">+ Agregar otro plato</button>
       </div>
-      <p class="muted" style="font-size:.82rem;margin-top:.6rem;">Después, en cada pedido, agregás el plato del día con el botón "+ Plato del día" (podés editar nombre y precio en el momento).</p>
+      <p class="muted" style="font-size:.82rem;margin-top:.6rem;">Después, en cada pedido, agregás el plato del día con el botón "+ Plato del día" (podés editar nombre y precio en el momento; si cargaste más de uno, elegís cuál).</p>
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn ghost" id="pdd-cancel">Cancelar</button>
         <button class="btn" id="pdd-save">Guardar</button>

@@ -37,6 +37,38 @@ def _migrar_columnas() -> None:
                 )
 
 
+def _migrar_plato_dia_items() -> None:
+    """plato_dia guardaba antes un único plato del día por fecha (columnas
+    nombre/precio_efectivo/precio_lista, ya no declaradas en el modelo). Ahora
+    puede haber varios, en la tabla plato_dia_items. Instalaciones existentes
+    migran esas filas la primera vez que corre esta versión."""
+    try:
+        with engine.begin() as conn:
+            columnas = {
+                f[1] for f in conn.execute(text("PRAGMA table_info(plato_dia)")).fetchall()
+            }
+            if "nombre" not in columnas:
+                return  # instalación nueva: la tabla nunca tuvo esas columnas
+            if conn.execute(text("SELECT 1 FROM plato_dia_items LIMIT 1")).fetchone():
+                return  # ya migrado
+            filas = conn.execute(
+                text(
+                    "SELECT fecha, nombre, precio_efectivo, precio_lista FROM plato_dia"
+                    " WHERE hay = 1 AND nombre != ''"
+                )
+            ).fetchall()
+            for fecha, nombre, ef, li in filas:
+                conn.execute(
+                    text(
+                        "INSERT INTO plato_dia_items (fecha, nombre, precio_efectivo, precio_lista)"
+                        " VALUES (:f, :n, :e, :l)"
+                    ),
+                    {"f": fecha, "n": nombre, "e": ef, "l": li},
+                )
+    except Exception as e:  # nunca impedir el arranque por esta migración
+        print(f"[aviso] No se pudo migrar plato_dia_items: {e}")
+
+
 def _indice_unico_numero() -> None:
     """Garantiza que no haya dos pedidos con el mismo número el mismo día.
 
@@ -69,6 +101,7 @@ def _indice_unico_numero() -> None:
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrar_columnas()
+    _migrar_plato_dia_items()
     _indice_unico_numero()
     db = SessionLocal()
     try:

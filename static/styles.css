@@ -289,6 +289,10 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .item-line input:focus, .item-line select:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
 .total-box { font-size: 1.7rem; font-weight: 800; color: var(--brand); letter-spacing: -.02em; }
 
+/* --------------------------------------------------- platos del día (modal) */
+.pdd-item-row { padding-bottom: .7rem; margin-bottom: .7rem; border-bottom: 1px dashed var(--line-strong); }
+.pdd-item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
 /* Remate del formulario: total destacado + botones de guardar. */
 .total-line {
   display: flex; justify-content: space-between; align-items: center; gap: .8rem;
