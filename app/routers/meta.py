@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import config as cfg
 from ..database import get_db
@@ -82,6 +82,7 @@ def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
     fecha = fecha or date.today()
     pedidos = (
         db.query(Pedido)
+        .options(selectinload(Pedido.items))
         .filter(Pedido.fecha == fecha, Pedido.anulado.is_(False))
         .all()
     )

@@ -1133,17 +1133,27 @@ $("pdd-cancel").addEventListener("click", () => {
 
 function setupAutocomplete(inputId, listId, fetcher) {
   const input = $(inputId), list = $(listId);
-  let items = [], active = -1;
+  let items = [], active = -1, timer = null, ultimoToken = 0;
   const close = () => { list.classList.add("hidden"); active = -1; };
-  input.addEventListener("input", async () => {
-    const opts = await fetcher(input.value.trim());
-    items = opts;
-    if (!opts.length) return close();
-    list.innerHTML = opts.map((o, i) => `<div data-i="${i}">${escapeHtml(o.label)}</div>`).join("");
-    list.classList.remove("hidden");
-    list.querySelectorAll("div").forEach((d) =>
-      d.addEventListener("mousedown", (e) => { e.preventDefault(); opts[+d.dataset.i].onPick(); close(); })
-    );
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (!q) return close();
+    // Debounce (no tirar una consulta por cada tecla) + token para ignorar
+    // una respuesta vieja que llega después de una búsqueda más nueva (si no,
+    // el resultado que se ve puede quedar desincronizado de lo tipeado).
+    const token = ++ultimoToken;
+    timer = setTimeout(async () => {
+      const opts = await fetcher(q);
+      if (token !== ultimoToken) return;
+      items = opts;
+      if (!opts.length) return close();
+      list.innerHTML = opts.map((o, i) => `<div data-i="${i}">${escapeHtml(o.label)}</div>`).join("");
+      list.classList.remove("hidden");
+      list.querySelectorAll("div").forEach((d) =>
+        d.addEventListener("mousedown", (e) => { e.preventDefault(); opts[+d.dataset.i].onPick(); close(); })
+      );
+    }, 180);
   });
   input.addEventListener("keydown", (e) => {
     if (list.classList.contains("hidden")) return;
@@ -1172,10 +1182,17 @@ async function loadDay() {
   $("f-fecha").value = state.fecha;
   const label = state.fecha === todayISO() ? "Hoy — " + fmtFecha(state.fecha) : fmtFecha(state.fecha);
   $("day-label").textContent = label;
-  await loadRepartidoresDia();
-  await loadPlatoDia();
-  state.pedidos = await api("/api/pedidos?fecha=" + state.fecha);
-  renderTabla();
+  // Los tres no dependen entre sí: en paralelo en vez de uno detrás del otro.
+  const [, , pedidos] = await Promise.all([
+    loadRepartidoresDia(),
+    loadPlatoDia(),
+    api("/api/pedidos?fecha=" + state.fecha),
+  ]);
+  // Evita reconstruir toda la tabla (pierde scroll/foco) si el refresco
+  // automático de cada minuto no trajo ningún cambio real.
+  const cambio = JSON.stringify(pedidos) !== JSON.stringify(state.pedidos);
+  state.pedidos = pedidos;
+  if (cambio) renderTabla();
   loadResumen();
   checkHoraLimite();
 }
