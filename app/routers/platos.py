@@ -51,6 +51,20 @@ def dar_de_baja(plato_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.delete("/{plato_id}/definitivo", status_code=204)
+def borrar_definitivo(plato_id: int, db: Session = Depends(get_db)):
+    """Borra definitivamente un plato ya dado de baja. Los pedidos que ya lo
+    usaron no se ven afectados: guardan nombre y precio propios (snapshot),
+    no dependen de que el plato siga existiendo en la carta."""
+    plato = db.get(Plato, plato_id)
+    if not plato:
+        raise HTTPException(404, "Plato no encontrado")
+    if plato.activo:
+        raise HTTPException(400, "Sólo se pueden borrar definitivamente platos dados de baja.")
+    db.delete(plato)
+    db.commit()
+
+
 @router.post("/aumentar")
 def aumentar_todos(data: AumentoIn, db: Session = Depends(get_db)):
     """Suma el mismo monto a ambos precios de todos los platos activos.

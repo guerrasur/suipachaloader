@@ -104,15 +104,14 @@ function precioSegunMetodo(plato) {
   return $("f-pago").value === "Efectivo" ? plato.precio_efectivo : plato.precio_lista;
 }
 
-function addItem(pdd = false) {
+function addItem(pdd = false, pddIdx = 0) {
   if (pdd) {
     // Se precarga con el plato del día elegido para la fecha (nombre y
     // precio según método), pero nombre y precio quedan editables. Si hay
-    // más de un plato del día cargado, se usa el elegido en el selector.
+    // más de un plato del día cargado, cada uno tiene su propio botón
+    // ("+ Nombre") y pddIdx indica cuál se apretó.
     const items = state.platoDia.hay ? state.platoDia.items : [];
-    let elegido = null;
-    if (items.length === 1) elegido = items[0];
-    else if (items.length > 1) elegido = items[+$("pdd-elegir").value] || items[0];
+    const elegido = items[pddIdx] || null;
     const ef = elegido ? elegido.precio_efectivo : 0;
     const li = elegido ? elegido.precio_lista : 0;
     state.items.push({
@@ -1021,16 +1020,16 @@ async function loadPlatoDia() {
   } else {
     lbl.textContent = "Plato del día";
   }
-  // El botón "+ Plato del día" del formulario refleja el/los del día; si hay
-  // más de uno, se muestra un selector al lado para elegir cuál agregar.
-  $("add-pdd").textContent = items.length === 1 ? `+ ${items[0].nombre}` : "+ Plato del día";
-  const sel = $("pdd-elegir");
-  if (items.length > 1) {
-    sel.innerHTML = items.map((it, i) => `<option value="${i}">${escapeHtml(it.nombre)}</option>`).join("");
-    sel.classList.remove("hidden");
-  } else {
-    sel.classList.add("hidden");
-  }
+  // El botón "+ Plato del día" del formulario refleja el primero del día; si
+  // hay más de uno, se agrega un botón idéntico al lado por cada adicional.
+  $("add-pdd").textContent = items.length ? `+ ${items[0].nombre}` : "+ Plato del día";
+  const extra = $("pdd-extra-botones");
+  extra.innerHTML = items.slice(1).map((it, i) =>
+    `<button type="button" class="btn ghost sm pdd-extra" data-idx="${i + 1}">+ ${escapeHtml(it.nombre)}</button>`
+  ).join(" ");
+  extra.querySelectorAll(".pdd-extra").forEach((b) =>
+    b.addEventListener("click", () => addItem(true, +b.dataset.idx))
+  );
 }
 
 $("btn-plato-dia").addEventListener("click", openPddModal);
@@ -1240,7 +1239,8 @@ function renderRow(p) {
   const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
                  (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span> ' : "");
   const salida = p.hora_salida
-    ? `<span class="badge salio">🛵 SALIÓ</span> <input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />`
+    ? `<span class="badge salio">🛵 SALIÓ</span> <input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />
+       <button type="button" class="btn ghost sm r-des-salio" ${p.anulado ? "disabled" : ""} title="Deshacer: marcar que todavía no salió">✕</button>`
     : `<button class="btn ok sm r-salio" ${p.anulado ? "disabled" : ""} title="Marcar que el pedido salió ahora">🛵 Salió</button>`;
   tr.innerHTML = `
     <td class="num-pedido">${p.numero ?? "—"}</td>
@@ -1272,6 +1272,7 @@ function renderRow(p) {
     const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
     patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora}:00` });
   });
+  tr.querySelector(".r-des-salio")?.addEventListener("click", () => patch(p.id, { hora_salida: null }));
   tr.querySelector(".r-pagado")?.addEventListener("click", () => patch(p.id, { pagado: !p.pagado }));
   tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
   tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
@@ -1290,8 +1291,22 @@ function actualizarPedidoEnTabla(actualizado) {
   if (i >= 0) state.pedidos[i] = actualizado;
   const tr = $("tabla-body").querySelector(`tr[data-id="${actualizado.id}"]`);
   if (tr) {
-    if (pasaFiltro(actualizado)) tr.replaceWith(renderRow(actualizado));
-    else tr.remove(); // ej: filtro "pendientes" y el pedido dejó de estarlo
+    if (pasaFiltro(actualizado)) {
+      // Si el control editado (ej. hora de salida) tenía el foco, reemplazar
+      // la fila lo pierde: un <input type="time"> dispara "change" apenas el
+      // valor queda completo, sin que el usuario haya salido del campo, así
+      // que perder el foco ahí corta la edición a mitad de camino. Se
+      // restaura en el control equivalente de la fila nueva.
+      const activo = document.activeElement;
+      const clase = tr.contains(activo)
+        ? [...activo.classList].find((c) => c.startsWith("r-"))
+        : null;
+      const nueva = renderRow(actualizado);
+      tr.replaceWith(nueva);
+      if (clase) nueva.querySelector("." + clase)?.focus();
+    } else {
+      tr.remove(); // ej: filtro "pendientes" y el pedido dejó de estarlo
+    }
   }
   loadResumen(); // los totales del día pueden haber cambiado
 }
@@ -1885,12 +1900,20 @@ async function loadCarta() {
       <td>${p.activo ? "Sí" : "No"}</td>
       <td class="nowrap">
         <button class="btn ghost sm c-edit">✎</button>
-        ${p.activo ? '<button class="btn ghost sm c-baja">Baja</button>' : ""}
+        ${p.activo
+          ? '<button class="btn ghost sm c-baja">Baja</button>'
+          : '<button class="btn danger sm c-borrar" title="Borrar definitivamente">🗑</button>'}
       </td>`;
     tr.querySelector(".c-edit").addEventListener("click", () => openPlatoModal(p));
     tr.querySelector(".c-baja")?.addEventListener("click", async () => {
       if (confirm("¿Dar de baja este plato? Se oculta pero no se borra el historial.")) {
         await api(`/api/platos/${p.id}`, { method: "DELETE" }); loadCarta();
+      }
+    });
+    tr.querySelector(".c-borrar")?.addEventListener("click", async () => {
+      if (confirm(`¿Borrar definitivamente "${p.nombre}"? Los pedidos que ya lo usaron no se ven afectados, pero esto no se puede deshacer.`)) {
+        await api(`/api/platos/${p.id}/definitivo`, { method: "DELETE" });
+        await loadCatalog(); loadCarta();
       }
     });
     tb.appendChild(tr);

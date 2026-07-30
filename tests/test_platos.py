@@ -45,6 +45,26 @@ def test_editar_plato_inexistente_404(client):
     assert r.status_code == 404
 
 
+def test_borrar_definitivo_requiere_baja_previa(client):
+    r = client.post("/api/platos", json={"nombre": "Sopa", "categoria": "Varios",
+                                         "precio_efectivo": 1000, "precio_lista": 1200})
+    plato = r.json()
+
+    # Todavía activo: no se puede borrar definitivamente.
+    r = client.delete(f"/api/platos/{plato['id']}/definitivo")
+    assert r.status_code == 400
+
+    client.delete(f"/api/platos/{plato['id']}")  # baja lógica
+    r = client.delete(f"/api/platos/{plato['id']}/definitivo")
+    assert r.status_code == 204
+    assert _por_nombre(client, "Sopa", incluir_inactivos=True) is None
+
+
+def test_borrar_definitivo_inexistente_404(client):
+    r = client.delete("/api/platos/999999/definitivo")
+    assert r.status_code == 404
+
+
 def test_aumentar_no_toca_plato_del_dia(client):
     # El seed incluye "Plato del día" (precio 0) y platos normales.
     pdd_antes = _por_nombre(client, "Plato del día")
