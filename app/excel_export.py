@@ -16,7 +16,7 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .database import DATA_DIR
 from .models import Pedido
@@ -98,6 +98,7 @@ def exportar_mes(db: Session, anio: int, mes: int, nombre_local: str = "Suipacha
     # Días del mes con pedidos, ordenados.
     pedidos = (
         db.query(Pedido)
+        .options(selectinload(Pedido.items))
         .filter(Pedido.fecha >= date(anio, mes, 1))
         .filter(Pedido.fecha < (date(anio + (mes == 12), (mes % 12) + 1, 1)))
         .order_by(Pedido.fecha, Pedido.hora_pedido)
@@ -125,6 +126,7 @@ def exportar_dia(db: Session, d: date, nombre_local: str = "Suipacha") -> Path:
 
     pedidos = (
         db.query(Pedido)
+        .options(selectinload(Pedido.items))
         .filter(Pedido.fecha == d)
         .order_by(Pedido.hora_pedido)
         .all()

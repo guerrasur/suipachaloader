@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import config as cfg
 from ..database import get_db
@@ -48,24 +48,29 @@ def _commit_o_409(db: Session) -> None:
         raise HTTPException(409, "Número de pedido en conflicto, reintentá.")
 
 
-def _serializar(db: Session, p: Pedido) -> dict:
-    """PedidoOut + banderas de alerta calculadas para el día de hoy."""
+def _serializar(db: Session, p: Pedido, config: dict[str, str] | None = None) -> dict:
+    """PedidoOut + banderas de alerta calculadas para el día de hoy.
+
+    ``config`` opcional: listar() precarga una sola vez los valores de
+    configuración y los pasa para cada pedido, en vez de volver a consultar
+    la tabla config por cada uno (N+1 con muchos pedidos en el día)."""
     out = PedidoOut.model_validate(p).model_dump()
     out["demorado"] = False
     out["alerta_sin_facturar"] = False
     if p.anulado or p.fecha != date.today():
         return out
 
+    valores = config if config is not None else cfg.get_all(db)
     ahora = datetime.now()
     # Demora de salida: sólo aplica a pedidos con envío pendientes de salir.
     if p.tipo == "Envío" and not p.hora_salida:
-        limite = int(cfg.get_value(db, "minutos_demora_salida") or 30)
+        limite = int(valores.get("minutos_demora_salida") or 30)
         if p.hora_pedido and ahora - p.hora_pedido > timedelta(minutes=limite):
             out["demorado"] = True
     # Sin facturar después de la hora configurada.
     if not p.facturado:
         try:
-            hlim = _parse_hora(cfg.get_value(db, "hora_alerta_sin_facturar") or "14:00")
+            hlim = _parse_hora(valores.get("hora_alerta_sin_facturar") or "14:00")
             if ahora.time() >= hlim:
                 out["alerta_sin_facturar"] = True
         except ValueError:
@@ -78,11 +83,13 @@ def listar(fecha: date | None = None, db: Session = Depends(get_db)):
     fecha = fecha or date.today()
     pedidos = (
         db.query(Pedido)
+        .options(selectinload(Pedido.items))
         .filter(Pedido.fecha == fecha)
         .order_by(Pedido.hora_pedido)
         .all()
     )
-    return [_serializar(db, p) for p in pedidos]
+    config = cfg.get_all(db)
+    return [_serializar(db, p, config) for p in pedidos]
 
 
 def _proximo_numero(db: Session, fecha: date) -> int:
