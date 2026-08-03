@@ -7,6 +7,7 @@ hace falta un solver de ruteo.
 from __future__ import annotations
 
 import math
+import re
 from urllib.parse import quote
 
 Punto = tuple[float, float]  # (lat, lon)
@@ -85,21 +86,54 @@ def ordenar_ruta(origen: Punto | None, puntos: list[Punto]) -> list[int]:
     return orden
 
 
-def google_maps_route_link(origen: str, direcciones_en_orden: list[str]) -> str:
+# Unidad (piso/depto) pegada al final de una calle+altura: "Lavalle 1268 7mo",
+# "Juana Manso 555 4D". Google la lee como parte de la altura y termina
+# ubicando otra cuadra, así que no va en el link. Mismo criterio que
+# `_separarUnidad` en static/app.js (ver comentario espejo allá).
+_UNIDAD_FINAL = re.compile(
+    r"^(.*?\d{1,5})\s+(?:[0-9]{1,3}[a-zA-Z]{1,2}|[a-zA-Z]{1,2}[0-9]{1,3})$"
+)
+
+
+def direccion_para_maps(direccion: str, ciudad: str = "") -> str:
+    """Dirección tal como se le manda a Google Maps.
+
+    Normaliza espacios, saca la unidad pegada al final y agrega la ciudad si no
+    viene incluida. La ciudad es lo que evita que "Lavalle 1268" a secas caiga
+    en cualquier Lavalle del mundo; es el mismo agregado que ya hace
+    `geocoding.geocode` antes de consultar Nominatim.
+    """
+    limpia = " ".join((direccion or "").split())
+    if not limpia:
+        return ""
+    m = _UNIDAD_FINAL.match(limpia)
+    if m:
+        limpia = m.group(1).strip()
+    ciudad = " ".join((ciudad or "").split())
+    if ciudad and ciudad.lower() not in limpia.lower():
+        limpia = f"{limpia}, {ciudad}"
+    return limpia
+
+
+def google_maps_route_link(origen: str, direcciones_en_orden: list[str], ciudad: str = "") -> str:
     """Link de Google Maps con ruta multi-parada, sin necesitar API key."""
     if not direcciones_en_orden:
         return ""
-    destino = quote(direcciones_en_orden[-1])
+    paradas = [direccion_para_maps(d, ciudad) for d in direcciones_en_orden]
+    destino = quote(paradas[-1], safe="")
     partes = [f"https://www.google.com/maps/dir/?api=1&destination={destino}&travelmode=driving"]
     if origen:
-        partes.append(f"&origin={quote(origen)}")
-    intermedias = direcciones_en_orden[:-1]
+        partes.append(f"&origin={quote(direccion_para_maps(origen, ciudad), safe='')}")
+    intermedias = paradas[:-1]
     if intermedias:
-        waypoints = "|".join(quote(d) for d in intermedias)
+        waypoints = "|".join(quote(d, safe="") for d in intermedias)
         partes.append(f"&waypoints={waypoints}")
     return "".join(partes)
 
 
-def google_maps_search_link(direccion: str) -> str:
+def google_maps_search_link(direccion: str, ciudad: str = "") -> str:
     """Link de búsqueda de una sola dirección, sin geocoding ni API key."""
-    return f"https://www.google.com/maps/search/?api=1&query={quote(direccion or '')}"
+    return (
+        "https://www.google.com/maps/search/?api=1&query="
+        + quote(direccion_para_maps(direccion, ciudad), safe="")
+    )

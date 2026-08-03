@@ -276,8 +276,9 @@
           <input id="c-direccion-local" placeholder="Ej: Suipacha 123, Buenos Aires" />
         </div>
         <div class="field" style="margin-bottom:1rem;">
-          <label>Ciudad/zona (se agrega a las direcciones al ubicarlas en el mapa)</label>
+          <label>Ciudad/zona (se agrega a las direcciones en los links de Google Maps y al ubicarlas)</label>
           <input id="c-ciudad-default" placeholder="Ej: Buenos Aires, Argentina" />
+          <small class="muted">Importante: sin esto, una calle a secas puede caer en otra localidad.</small>
         </div>
         <button class="btn" id="btn-guardar-config">Guardar configuración</button>
         <span id="config-ok" class="muted" style="margin-left:.6rem;"></span>
@@ -370,6 +371,7 @@
         <a class="btn secondary" id="ticket-maps" target="_blank" rel="noopener">🗺️ Ver dirección en Maps</a>
         <button class="btn secondary" id="ticket-ruta">🗺️ Ruta optimizada</button>
       </div>
+      <p class="muted" id="ticket-maps-query" style="font-size:.78rem;margin:.55rem 0 0;"></p>
       <p class="muted" id="ticket-hint" style="font-size:.82rem;margin:.6rem 0 0;">Copiá la imagen y pegala (Ctrl+V) en el chat de WhatsApp del repartidor. Con "Copiar contacto" le pegás también el teléfono del cliente.</p>
       <div class="row" style="justify-content:flex-end;margin-top:.6rem;">
         <button class="btn ghost" id="ticket-cerrar">Cerrar</button>
