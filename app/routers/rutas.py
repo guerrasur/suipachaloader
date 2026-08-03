@@ -77,7 +77,7 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
                  "cliente_direccion": p.cliente_direccion, "cliente_telefono": p.cliente_telefono}
                 for p in pedidos_en_orden
             ],
-            "maps_link": google_maps_route_link(direccion_local, direcciones),
+            "maps_link": google_maps_route_link(direccion_local, direcciones, ciudad_default),
         })
 
     return {
@@ -141,7 +141,7 @@ def optimizar_repartidor(repartidor: str, fecha: date | None = None, db: Session
 
     return {
         "repartidor": repartidor,
-        "maps_link": google_maps_route_link(direccion_local, direcciones),
+        "maps_link": google_maps_route_link(direccion_local, direcciones, ciudad_default),
         "pedidos": [{"id": p.id, "numero": p.numero} for p in pedidos_en_orden],
         "sin_geocodificar": [{"id": p.id, "numero": p.numero} for p in sin_geocodificar],
     }

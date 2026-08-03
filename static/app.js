@@ -725,7 +725,19 @@ function parseMensajeWhatsApp(texto, platos) {
     if (unidad.indicacion) { res.direccion = unidad.direccion; indics.push(unidad.indicacion); }
     const partida = _partirDireccion(res.direccion);
     res.direccion = partida.direccion;
-    if (partida.indicaciones) indics.push(partida.indicaciones);
+    // Segunda pasada: recién ahora que _partirDireccion sacó la palabra clave
+    // puede quedar la unidad pegada al final ("Lavalle 1268 7mo piso" deja
+    // "Lavalle 1268 7mo"). Ese "7mo" pegado a la altura hace que Google Maps
+    // reinterprete la dirección y caiga en otra cuadra, así que va a
+    // Indicaciones como cualquier otro piso (adelante de lo que separó
+    // _partirDireccion, para que se lea "7mo piso" y no "piso · 7mo").
+    const unidad2 = _separarUnidad(res.direccion);
+    if (unidad2.indicacion) {
+      res.direccion = unidad2.direccion;
+      indics.push([unidad2.indicacion, partida.indicaciones].filter(Boolean).join(" "));
+    } else if (partida.indicaciones) {
+      indics.push(partida.indicaciones);
+    }
   }
   if (indics.length) res.indicaciones = indics.join(" · ");
 
@@ -1396,96 +1408,160 @@ function telefonoWa(tel) {
 }
 
 function wrapText(ctx, texto, maxWidth) {
-  const palabras = texto.split(/\s+/).filter(Boolean);
   const lineas = [];
   let linea = "";
-  for (const p of palabras) {
+  const cortar = (palabra) => {
+    // Palabra sola más ancha que el renglón (una dirección sin espacios, un
+    // nombre larguísimo): se parte por letra para que no se salga del canvas.
+    let trozo = "";
+    for (const ch of palabra) {
+      if (trozo && ctx.measureText(trozo + ch).width > maxWidth) {
+        lineas.push(trozo);
+        trozo = ch;
+      } else trozo += ch;
+    }
+    return trozo;
+  };
+  for (const p of texto.split(/\s+/).filter(Boolean)) {
     const prueba = linea ? linea + " " + p : p;
     if (ctx.measureText(prueba).width > maxWidth && linea) {
       lineas.push(linea);
       linea = p;
     } else linea = prueba;
+    if (ctx.measureText(linea).width > maxWidth) linea = cortar(linea);
   }
   if (linea) lineas.push(linea);
   return lineas;
 }
 
-function drawTicket(p) {
-  const W = 640, H = 800, S = 2; // lógico + escala 2x para nitidez
-  const cv = $("ticket-canvas");
+// --- Layout de los tickets --------------------------------------------------
+// Los dos tickets se arman igual: primero se mide todo contra un canvas
+// offscreen y se guarda cada operación de dibujo con su posición final, y
+// recién después se dibuja el modelo. Así el alto del canvas sale de las mismas
+// cuentas que el dibujo y no puede quedar desincronizado (antes eran dos
+// fórmulas paralelas, y el resultado era espacio de más abajo y texto cortado).
+
+function fuente(peso, size) {
+  return { font: `${peso ? peso + " " : ""}${size}px Arial, sans-serif`, size };
+}
+
+// El tamaño más grande de `tamanos` con el que `texto` entra en `maxWidth`
+// (o el más chico, si ninguno entra).
+function fitFont(ctx, texto, maxWidth, peso, tamanos) {
+  for (const size of tamanos) {
+    const f = fuente(peso, size);
+    ctx.font = f.font;
+    if (ctx.measureText(texto).width <= maxWidth) return f;
+  }
+  return fuente(peso, tamanos[tamanos.length - 1]);
+}
+
+// Acumulador de operaciones + alto. `linea()` apoya el texto en su línea de
+// base y avanza el cursor con margen suficiente para las colas (j, g, $).
+function nuevoLayout(yInicial) {
+  const ops = [];
+  return {
+    ops,
+    y: yInicial,
+    linea(texto, ff, color, align, x) {
+      ops.push({ texto, font: ff.font, color, align, x, y: this.y + ff.size });
+      this.y += Math.round(ff.size * 1.25);
+      return ops[ops.length - 1];
+    },
+    separador(x1, x2) {
+      ops.push({ sep: true, x1, x2, y: this.y });
+    },
+    espacio(px) { this.y += px; },
+  };
+}
+
+function pintarLayout(cv, ops, W, H, S) {
+  // El tamaño en pantalla lo resuelve el CSS (.ticket-canvas-wrap canvas), que
+  // limita ancho y alto manteniendo la proporción. Acá solo va el bitmap real.
   cv.width = W * S; cv.height = H * S;
-  cv.style.width = "100%";
   const ctx = cv.getContext("2d");
   ctx.scale(S, S);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = "#111";
-  ctx.lineWidth = 6;
-  ctx.strokeRect(3, 3, W - 6, H - 6);
-  ctx.textAlign = "center";
-
-  // Número gigante.
-  ctx.fillStyle = "#111";
-  ctx.font = "900 240px Arial, sans-serif";
-  ctx.fillText(p.numero != null ? String(p.numero) : "—", W / 2, 250);
-
-  let y = 320;
-  ctx.strokeStyle = "#bbb";
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(W - 50, y); ctx.stroke();
-  y += 60;
-
-  // Cliente - dirección (con wrap por si es larga).
-  ctx.fillStyle = "#111";
-  ctx.font = "bold 36px Arial, sans-serif";
-  const linea1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
-  for (const l of wrapText(ctx, linea1, W - 100)) {
-    ctx.fillText(l, W / 2, y);
-    y += 46;
-  }
-  if (p.indicaciones) {
-    ctx.fillStyle = "#555";
-    ctx.font = "28px Arial, sans-serif";
-    for (const l of wrapText(ctx, p.indicaciones, W - 100)) {
-      ctx.fillText(l, W / 2, y);
-      y += 36;
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 6; ctx.strokeRect(3, 3, W - 6, H - 6);
+  for (const o of ops) {
+    if (o.sep) {
+      ctx.strokeStyle = "#bbb"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(o.x1, o.y); ctx.lineTo(o.x2, o.y); ctx.stroke();
+      continue;
     }
+    ctx.font = o.font; ctx.fillStyle = o.color; ctx.textAlign = o.align;
+    ctx.fillText(o.texto, o.x, o.y);
+  }
+}
+
+function drawTicket(p) {
+  const W = 640, S = 2, M = 50;   // ancho lógico, escala 2x para nitidez, margen
+  const ANCHO = W - 2 * M;
+  const mc = document.createElement("canvas").getContext("2d");
+  const L = nuevoLayout(30);
+
+  // Número gigante (se achica si es de muchos dígitos).
+  const numero = p.numero != null ? String(p.numero) : "—";
+  L.linea(numero, fitFont(mc, numero, ANCHO, "900", [240, 200, 160, 120]), "#111", "center", W / 2);
+
+  L.espacio(30);
+  L.separador(M, W - M);
+  L.espacio(30);
+
+  const linea1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
+  const ffL1 = fuente("bold", 36);
+  mc.font = ffL1.font;
+  for (const l of wrapText(mc, linea1, ANCHO)) L.linea(l, ffL1, "#111", "center", W / 2);
+
+  if (p.indicaciones) {
+    const ffInd = fuente("", 28);
+    mc.font = ffInd.font;
+    for (const l of wrapText(mc, p.indicaciones, ANCHO)) L.linea(l, ffInd, "#555", "center", W / 2);
   }
 
-  y += 24;
-  ctx.strokeStyle = "#bbb";
-  ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(W - 50, y); ctx.stroke();
-  y += 76;
+  L.espacio(26);
+  L.separador(M, W - M);
+  L.espacio(34);
 
   // Línea de cobro. El vuelto calculado es solo para uso interno (formulario
   // y tabla de pedidos): no se imprime acá, solo el total y con cuánto paga.
   if (p.metodo_pago === "Efectivo") {
-    ctx.fillStyle = "#b3261e";
-    ctx.font = "900 52px Arial, sans-serif";
-    ctx.fillText(`Cobrar: ${money(p.total)}`, W / 2, y);
-    y += 60;
-    if (p.pago_efectivo_detalle) {
-      const digits = p.pago_efectivo_detalle.replace(/\D/g, "");
-      const pagaCon = digits ? money(parseInt(digits, 10)) : p.pago_efectivo_detalle;
-      ctx.fillStyle = "#111";
-      ctx.font = "bold 38px Arial, sans-serif";
-      ctx.fillText(`Paga con: ${pagaCon}`, W / 2, y);
-      y += 48;
+    const cobro = `Cobrar: ${money(p.total)}`;
+    L.linea(cobro, fitFont(mc, cobro, ANCHO, "900", [52, 46, 40, 34]), "#b3261e", "center", W / 2);
+    const pagaCon = _pagaConTexto(p);
+    if (pagaCon) {
+      const t = `Paga con: ${pagaCon}`;
+      L.espacio(10);
+      L.linea(t, fitFont(mc, t, ANCHO, "bold", [38, 34, 30, 26]), "#111", "center", W / 2);
     }
   } else {
-    ctx.fillStyle = "#1f8a4c";
-    ctx.font = "900 56px Arial, sans-serif";
-    ctx.fillText("PAGO ✔", W / 2, y);
-    y += 52;
-    ctx.fillStyle = "#555";
-    ctx.font = "30px Arial, sans-serif";
-    ctx.fillText(p.metodo_pago, W / 2, y);
+    L.linea("PAGO ✔", fuente("900", 56), "#1f8a4c", "center", W / 2);
+    L.espacio(6);
+    const ffM = fitFont(mc, p.metodo_pago, ANCHO, "", [30, 26, 22]);
+    L.linea(p.metodo_pago, ffM, "#555", "center", W / 2);
   }
+
+  // Alto mínimo para que un ticket corto no quede como una tarjetita.
+  pintarLayout($("ticket-canvas"), L.ops, W, Math.max(800, Math.round(L.y + 40)), S);
+}
+
+// Dirección tal como se le manda a Google Maps: sin la unidad pegada al final
+// ("Lavalle 1268 7mo" → "Lavalle 1268", si no Google reinterpreta la altura) y
+// con la ciudad configurada, que es lo que evita que una calle a secas caiga en
+// otra localidad. Espejo de `direccion_para_maps` en app/routing.py — si se
+// cambia el criterio acá, cambiarlo allá también (y al revés).
+function direccionParaMaps(direccion) {
+  let limpia = (direccion || "").split(/\s+/).filter(Boolean).join(" ");
+  if (!limpia) return "";
+  const m = limpia.match(/^(.*?\d{1,5})\s+(?:[0-9]{1,3}[a-z]{1,2}|[a-z]{1,2}[0-9]{1,3})$/i);
+  if (m) limpia = m[1].trim();
+  const ciudad = ((_cfgCache && _cfgCache.ciudad_default) || "").split(/\s+/).filter(Boolean).join(" ");
+  if (ciudad && !limpia.toLowerCase().includes(ciudad.toLowerCase())) limpia = `${limpia}, ${ciudad}`;
+  return limpia;
 }
 
 function googleMapsSearchLink(direccion) {
-  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(direccion || "");
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(direccionParaMaps(direccion));
 }
 
 function openTicket(p) {
@@ -1502,6 +1578,11 @@ function openTicket(p) {
   const conDireccion = !!(p.cliente_direccion || "").trim();
   $("ticket-maps").style.display = conDireccion ? "" : "none";
   if (conDireccion) $("ticket-maps").href = googleMapsSearchLink(p.cliente_direccion);
+  // A la vista qué se le manda exactamente a Maps: si la altura o la ciudad
+  // salieran mal, se ve acá antes de que el repartidor salga.
+  $("ticket-maps-query").textContent = conDireccion
+    ? "Maps busca: " + direccionParaMaps(p.cliente_direccion)
+    : "";
   const conRepartidor = p.tipo === "Envío" && !!(p.repartidor || "").trim();
   $("ticket-ruta").style.display = conRepartidor ? "" : "none";
   $("ticket-ruta").textContent = "🗺️ Ruta optimizada";
@@ -1535,88 +1616,76 @@ function _pagaConTexto(p) {
 }
 
 function drawTicketLote(pedidos, subtitulo) {
-  const W = 640, S = 2, M = 40;               // ancho, escala, margen
-  const cv = $("ticket-canvas");
-  cv.style.width = "100%";
-
-  // Pasada de medición sobre un canvas offscreen: calcula el alto necesario
-  // según cuántas líneas ocupa cada texto con su fuente.
+  const W = 640, S = 2, M = 40;   // ancho lógico, escala 2x, margen
+  const ANCHO = W - 2 * M;        // ancho útil real (el wrap medía contra otro)
+  const GAP = 18;                 // separación mínima entre el N° y el cobro
   const mc = document.createElement("canvas").getContext("2d");
+  const L = nuevoLayout(M);
+
+  // --- Encabezado -----------------------------------------------------------
+  const titulo = "🛵 " + (subtitulo || "Repartidor");
+  const ffTit = fitFont(mc, titulo, ANCHO, "900", [40, 36, 32, 28, 24]);
+  for (const l of wrapText(mc, titulo, ANCHO)) L.linea(l, ffTit, "#111", "center", W / 2);
+
+  L.linea(fmtFecha(state.fecha), fuente("", 24), "#555", "center", W / 2);
+
   const efectivoTotal = pedidos
     .filter((p) => p.metodo_pago === "Efectivo")
     .reduce((s, p) => s + (p.total || 0), 0);
-
-  // Modelo de bloques (mismas fuentes en medición y dibujo).
-  const bloques = pedidos.map((p) => {
-    mc.font = "bold 34px Arial, sans-serif";
-    const l1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
-    const l1w = wrapText(mc, l1, W - 2 * M - 70);
-    let indw = [];
-    if (p.indicaciones) { mc.font = "26px Arial, sans-serif"; indw = wrapText(mc, p.indicaciones, W - 2 * M - 70); }
-    return { p, l1w, indw };
-  });
-
-  let H = M + 52 + 34 + 40;                    // encabezado: título + fecha + resumen
-  for (const b of bloques) {
-    H += 24;                                   // separador
-    H += 46;                                   // N°
-    H += b.l1w.length * 42;
-    H += b.indw.length * 32;
-    H += 44;                                   // línea de cobro
-    H += 16;
-  }
-  H += M;
-
-  cv.width = W * S; cv.height = H * S;
-  const ctx = cv.getContext("2d");
-  ctx.scale(S, S);
-  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = "#111"; ctx.lineWidth = 6; ctx.strokeRect(3, 3, W - 6, H - 6);
-
-  let y = M + 40;
-  ctx.textAlign = "center"; ctx.fillStyle = "#111";
-  ctx.font = "900 40px Arial, sans-serif";
-  ctx.fillText("🛵 " + (subtitulo || "Repartidor"), W / 2, y);
-  y += 34;
-  ctx.font = "24px Arial, sans-serif"; ctx.fillStyle = "#555";
-  ctx.fillText(fmtFecha(state.fecha), W / 2, y);
-  y += 34;
-  ctx.font = "bold 26px Arial, sans-serif"; ctx.fillStyle = "#111";
   const resumen = `${pedidos.length} pedido${pedidos.length === 1 ? "" : "s"}`
     + (efectivoTotal > 0 ? ` · Efectivo a cobrar: ${money(efectivoTotal)}` : "");
-  ctx.fillText(resumen, W / 2, y);
-  y += 20;
+  L.linea(resumen, fitFont(mc, resumen, ANCHO, "bold", [26, 24, 22, 20]), "#111", "center", W / 2);
 
-  for (const b of bloques) {
-    const p = b.p;
-    y += 24;
-    ctx.strokeStyle = "#bbb"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(M, y - 12); ctx.lineTo(W - M, y - 12); ctx.stroke();
+  // --- Un bloque por pedido -------------------------------------------------
+  for (const p of pedidos) {
+    L.espacio(20);
+    L.separador(M, W - M);
+    L.espacio(14);
 
-    ctx.textAlign = "left"; ctx.fillStyle = "#111";
-    ctx.font = "900 34px Arial, sans-serif";
-    ctx.fillText(p.numero != null ? "N° " + p.numero : "#" + p.id, M, y + 24);
-    // Cobro alineado a la derecha en la misma fila del número.
-    ctx.textAlign = "right";
-    if (p.metodo_pago === "Efectivo") {
-      ctx.fillStyle = "#b3261e"; ctx.font = "900 30px Arial, sans-serif";
-      const pc = _pagaConTexto(p);
-      ctx.fillText(`Cobrar ${money(p.total)}${pc ? " · paga " + pc : ""}`, W - M, y + 22);
+    const num = p.numero != null ? "N° " + p.numero : "#" + p.id;
+    const ffNum = fuente("900", 34);
+    mc.font = ffNum.font;
+    const anchoNum = mc.measureText(num).width;
+
+    const esEfectivo = p.metodo_pago === "Efectivo";
+    const pagaCon = esEfectivo ? _pagaConTexto(p) : "";
+    const cobro = esEfectivo
+      ? `Cobrar ${money(p.total)}${pagaCon ? " · paga " + pagaCon : ""}`
+      : `PAGO ✔ ${p.metodo_pago}`;
+    const colorCobro = esEfectivo ? "#b3261e" : "#1f8a4c";
+
+    // El cobro va a la derecha, en la misma fila del N°, achicando la fuente lo
+    // necesario. Si ni al tamaño mínimo entra al lado del número, baja a su
+    // propia fila: antes se dibujaba igual y terminaba tapando el N°.
+    const disponible = ANCHO - anchoNum - GAP;
+    const ffCobro = fitFont(mc, cobro, disponible, "900", [30, 28, 26, 24, 22]);
+    const entraAlLado = mc.measureText(cobro).width <= disponible;
+
+    const filaNum = L.linea(num, ffNum, "#111", "left", M);
+    if (entraAlLado) {
+      L.ops.push({
+        texto: cobro, font: ffCobro.font, color: colorCobro,
+        align: "right", x: W - M, y: filaNum.y,
+      });
     } else {
-      ctx.fillStyle = "#1f8a4c"; ctx.font = "900 28px Arial, sans-serif";
-      ctx.fillText(`PAGO ✔ ${p.metodo_pago}`, W - M, y + 22);
+      L.linea(cobro, fitFont(mc, cobro, ANCHO, "900", [30, 28, 26, 24, 22]),
+              colorCobro, "right", W - M);
     }
-    y += 46;
 
-    ctx.textAlign = "left"; ctx.fillStyle = "#111";
-    ctx.font = "bold 34px Arial, sans-serif";
-    for (const l of b.l1w) { ctx.fillText(l, M, y + 24); y += 42; }
-    if (b.indw.length) {
-      ctx.fillStyle = "#555"; ctx.font = "26px Arial, sans-serif";
-      for (const l of b.indw) { ctx.fillText(l, M, y + 20); y += 32; }
+    const l1 = [p.cliente_nombre, p.cliente_direccion].filter(Boolean).join(" - ") || "(sin datos)";
+    const ffL1 = fuente("bold", 34);
+    mc.font = ffL1.font;
+    for (const l of wrapText(mc, l1, ANCHO)) L.linea(l, ffL1, "#111", "left", M);
+
+    if (p.indicaciones) {
+      const ffInd = fuente("", 26);
+      mc.font = ffInd.font;
+      for (const l of wrapText(mc, p.indicaciones, ANCHO)) L.linea(l, ffInd, "#555", "left", M);
     }
-    y += 16;
+    L.espacio(10);
   }
+
+  pintarLayout($("ticket-canvas"), L.ops, W, Math.round(L.y + M), S);
 }
 
 function contactoLote(pedidos, subtitulo) {
@@ -1658,6 +1727,7 @@ function openTicketLote(pedidos, titulo, opts = {}) {
   } else {
     $("ticket-maps").style.display = "none";
   }
+  $("ticket-maps-query").textContent = "";
   $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos y direcciones de todos los pedidos.";
   $("modal-ticket").classList.add("show");
 }

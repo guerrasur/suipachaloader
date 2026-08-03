@@ -330,7 +330,13 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 /* Ticket para el repartidor. */
 .num-pedido { font-weight: 800; font-size: 1.05rem; text-align: center; }
 .ticket-canvas-wrap { display: flex; justify-content: center; background: #f2f4f7; border-radius: 10px; padding: .6rem; }
-.ticket-canvas-wrap canvas { max-width: 340px; width: 100%; height: auto; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+/* La preview se limita también en alto: un ticket de muchos pedidos es muy
+   largo y, con solo max-width, quedaba como una tira que no entraba en el
+   modal. object-fit mantiene la proporción. El PNG exportado va completo. */
+.ticket-canvas-wrap canvas {
+  max-width: 340px; max-height: 60vh; width: auto; height: auto;
+  object-fit: contain; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
 
 /* Facturación de fin del día: una columna por método de pago. */
 .fact-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .8rem; }
