@@ -41,7 +41,14 @@ def _migrar_plato_dia_items() -> None:
     """plato_dia guardaba antes un único plato del día por fecha (columnas
     nombre/precio_efectivo/precio_lista, ya no declaradas en el modelo). Ahora
     puede haber varios, en la tabla plato_dia_items. Instalaciones existentes
-    migran esas filas la primera vez que corre esta versión."""
+    migran esas filas la primera vez que corre esta versión.
+
+    Las columnas viejas quedaban NOT NULL sin default a nivel SQL; como el
+    ORM ya no las conoce, cualquier INSERT nuevo (osea, plato del día de
+    cualquier fecha sin fila todavía) rompía con IntegrityError y el modal
+    de guardado quedaba "sin hacer nada" para el usuario. Por eso, además de
+    copiar los datos, se reconstruye la tabla sin esas columnas (SQLite no
+    soporta DROP COLUMN con NOT NULL sin rebuild)."""
     try:
         with engine.begin() as conn:
             columnas = {
@@ -49,22 +56,34 @@ def _migrar_plato_dia_items() -> None:
             }
             if "nombre" not in columnas:
                 return  # instalación nueva: la tabla nunca tuvo esas columnas
-            if conn.execute(text("SELECT 1 FROM plato_dia_items LIMIT 1")).fetchone():
-                return  # ya migrado
-            filas = conn.execute(
-                text(
-                    "SELECT fecha, nombre, precio_efectivo, precio_lista FROM plato_dia"
-                    " WHERE hay = 1 AND nombre != ''"
-                )
-            ).fetchall()
-            for fecha, nombre, ef, li in filas:
-                conn.execute(
+            if not conn.execute(text("SELECT 1 FROM plato_dia_items LIMIT 1")).fetchone():
+                filas = conn.execute(
                     text(
-                        "INSERT INTO plato_dia_items (fecha, nombre, precio_efectivo, precio_lista)"
-                        " VALUES (:f, :n, :e, :l)"
-                    ),
-                    {"f": fecha, "n": nombre, "e": ef, "l": li},
+                        "SELECT fecha, nombre, precio_efectivo, precio_lista FROM plato_dia"
+                        " WHERE hay = 1 AND nombre != ''"
+                    )
+                ).fetchall()
+                for fecha, nombre, ef, li in filas:
+                    conn.execute(
+                        text(
+                            "INSERT INTO plato_dia_items (fecha, nombre, precio_efectivo, precio_lista)"
+                            " VALUES (:f, :n, :e, :l)"
+                        ),
+                        {"f": fecha, "n": nombre, "e": ef, "l": li},
+                    )
+            conn.execute(text("ALTER TABLE plato_dia RENAME TO plato_dia_legacy"))
+            conn.execute(
+                text(
+                    "CREATE TABLE plato_dia ("
+                    " fecha DATE NOT NULL PRIMARY KEY,"
+                    " hay BOOLEAN NOT NULL DEFAULT 1"
+                    ")"
                 )
+            )
+            conn.execute(
+                text("INSERT INTO plato_dia (fecha, hay) SELECT fecha, hay FROM plato_dia_legacy")
+            )
+            conn.execute(text("DROP TABLE plato_dia_legacy"))
     except Exception as e:  # nunca impedir el arranque por esta migración
         print(f"[aviso] No se pudo migrar plato_dia_items: {e}")
 
