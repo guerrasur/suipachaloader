@@ -99,3 +99,56 @@ def test_set_precios_excluye_plato_del_dia(client):
 def test_set_precios_sin_ningun_precio_400(client):
     r = client.post("/api/platos/set-precios", json={})
     assert r.status_code == 400
+
+
+def test_aumentar_solo_los_ids_elegidos(client):
+    elegido_antes = _por_nombre(client, "Caesar")
+    otro_antes = _por_nombre(client, "Brie")
+    assert elegido_antes is not None and otro_antes is not None
+
+    r = client.post(
+        "/api/platos/aumentar", json={"monto": 1000, "ids": [elegido_antes["id"]]}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 1
+
+    assert _por_nombre(client, "Caesar")["precio_efectivo"] == elegido_antes["precio_efectivo"] + 1000
+    assert _por_nombre(client, "Caesar")["precio_lista"] == elegido_antes["precio_lista"] + 1000
+    # El que no fue elegido queda igual.
+    assert _por_nombre(client, "Brie")["precio_efectivo"] == otro_antes["precio_efectivo"]
+
+
+def test_set_precios_solo_los_ids_elegidos(client):
+    elegido = _por_nombre(client, "Caesar")
+    otro_antes = _por_nombre(client, "Brie")
+
+    r = client.post(
+        "/api/platos/set-precios",
+        json={"precio_efectivo": 9999, "ids": [elegido["id"]]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 1
+
+    assert _por_nombre(client, "Caesar")["precio_efectivo"] == 9999
+    assert _por_nombre(client, "Brie")["precio_efectivo"] == otro_antes["precio_efectivo"]
+
+
+def test_ids_explicitos_alcanzan_al_plato_del_dia(client):
+    """Elegir a mano el "Plato del día" sí lo cambia: la exclusión automática
+    es para el modo "todos", no para lo que el usuario tildó expresamente."""
+    pdd = _por_nombre(client, "Plato del día")
+
+    r = client.post("/api/platos/set-precios", json={"precio_efectivo": 7777, "ids": [pdd["id"]]})
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 1
+    assert _por_nombre(client, "Plato del día")["precio_efectivo"] == 7777
+
+
+def test_ids_vacio_no_actualiza_nada(client):
+    """Una lista vacía nunca puede interpretarse como "todos"."""
+    antes = _por_nombre(client, "Caesar")
+
+    r = client.post("/api/platos/aumentar", json={"monto": 1000, "ids": []})
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 0
+    assert _por_nombre(client, "Caesar")["precio_efectivo"] == antes["precio_efectivo"]

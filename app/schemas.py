@@ -90,11 +90,14 @@ class PlatoOut(PlatoIn):
 
 
 class AumentoIn(BaseModel):
-    monto: float  # se suma a precio_efectivo y precio_lista de todos los platos
+    monto: float  # se suma a precio_efectivo y precio_lista
+    # None = todos los platos activos; si viene una lista, sólo esos ids
+    # (los tildados en la carta). Ver _platos_a_actualizar en routers/platos.
+    ids: list[int] | None = None
 
 
 class SetPreciosIn(BaseModel):
-    """Fija masivamente un precio (o los dos) en todos los platos activos.
+    """Fija masivamente un precio (o los dos) en los platos elegidos.
 
     Se envía sólo el/los campo(s) que se quieren fijar; el que viene en None
     no se toca (permite cambiar sólo efectivo o sólo lista por separado).
@@ -102,6 +105,8 @@ class SetPreciosIn(BaseModel):
 
     precio_efectivo: float | None = None
     precio_lista: float | None = None
+    # Mismo criterio que AumentoIn: None = todos los activos, lista = sólo esos.
+    ids: list[int] | None = None
 
 
 # --- Items y pedidos --------------------------------------------------------

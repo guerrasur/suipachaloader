@@ -1973,13 +1973,60 @@ async function loadPendientes() {
 }
 
 // ------------------------------------------------------------------ carta
+// Platos tildados para que el cambio de precio (aumentar/fijar) aplique sólo
+// a ellos. Se mantiene entre recargas de la tabla —editar o dar de baja un
+// plato la vuelven a renderizar— y se descartan los ids que ya no existen.
+let cartaSeleccion = new Set();
+
+// null = "todos" (comportamiento histórico); si no, los ids elegidos.
+const seleccionCarta = () => (cartaSeleccion.size ? [...cartaSeleccion] : null);
+// Frases del alcance, para que carteles y confirmaciones se lean normal (sin
+// "(s)"). Hay dos formas porque en español "de + el" se contrae en "del".
+const elegidosTexto = (n) => (n === 1 ? "el plato elegido" : `los ${n} elegidos`);
+const deElegidos = (n) => (n === 1 ? "del plato elegido" : `de los ${n} elegidos`);
+const alcanceDe = (ids) => (ids ? deElegidos(ids.length) : "de TODOS los platos");
+
+// Única fuente de verdad de la selección en pantalla: sincroniza tildes y
+// resaltado de cada fila desde cartaSeleccion, y refleja el alcance en los
+// textos de las acciones, así nunca queda dudando a qué se le va a aplicar
+// el cambio de precio.
+function renderCartaSeleccion() {
+  const n = cartaSeleccion.size;
+  const filas = $("carta-body").querySelectorAll("tr");
+  filas.forEach((tr) => {
+    const elegida = cartaSeleccion.has(+tr.dataset.platoId);
+    tr.classList.toggle("fila-elegida", elegida);
+    tr.querySelector(".c-sel").checked = elegida;
+  });
+  $("lbl-aumentar").textContent = n
+    ? `Aumentar ${elegidosTexto(n)} +$X (efectivo y lista)`
+    : "Aumentar todos +$X (efectivo y lista)";
+  $("lbl-set-efectivo").textContent = n
+    ? `Fijar el precio en efectivo ${deElegidos(n)} a $`
+    : "Fijar TODOS los precios en efectivo a $";
+  $("lbl-set-lista").textContent = n
+    ? `Fijar el precio de lista ${deElegidos(n)} a $`
+    : "Fijar TODOS los precios de lista a $";
+  $("carta-sel-banner").style.display = n ? "" : "none";
+  $("carta-sel-texto").textContent = n === 1
+    ? "1 plato elegido: los cambios de precio se aplican sólo a ese."
+    : `${n} platos elegidos: los cambios de precio se aplican sólo a esos.`;
+  const todos = $("carta-sel-todos");
+  todos.checked = filas.length > 0 && n === filas.length;
+  todos.indeterminate = n > 0 && n < filas.length;
+}
+
 async function loadCarta() {
   const platos = await api("/api/platos?incluir_inactivos=true");
+  const vivos = new Set(platos.map((p) => p.id));
+  [...cartaSeleccion].forEach((id) => { if (!vivos.has(id)) cartaSeleccion.delete(id); });
   const tb = $("carta-body");
   tb.innerHTML = "";
   platos.forEach((p) => {
     const tr = document.createElement("tr");
+    tr.dataset.platoId = p.id;
     tr.innerHTML = `
+      <td class="carta-sel-col"><input type="checkbox" class="c-sel" ${cartaSeleccion.has(p.id) ? "checked" : ""} title="Elegir este plato para el cambio de precio" /></td>
       <td>${escapeHtml(p.nombre)}${p.es_plato_del_dia ? ' <span class="badge sf">especial</span>' : ""}</td>
       <td>${escapeHtml(p.categoria)}</td>
       <td class="right">${money(p.precio_efectivo)}</td>
@@ -1991,6 +2038,11 @@ async function loadCarta() {
           ? '<button class="btn ghost sm c-baja">Baja</button>'
           : '<button class="btn danger sm c-borrar" title="Borrar definitivamente">🗑</button>'}
       </td>`;
+    tr.querySelector(".c-sel").addEventListener("change", (e) => {
+      if (e.target.checked) cartaSeleccion.add(p.id);
+      else cartaSeleccion.delete(p.id);
+      renderCartaSeleccion();
+    });
     tr.querySelector(".c-edit").addEventListener("click", () => openPlatoModal(p));
     tr.querySelector(".c-baja")?.addEventListener("click", async () => {
       if (confirm("¿Dar de baja este plato? Se oculta pero no se borra el historial.")) {
@@ -2005,14 +2057,28 @@ async function loadCarta() {
     });
     tb.appendChild(tr);
   });
+  renderCartaSeleccion();
 }
+
+$("carta-sel-todos").addEventListener("change", (e) => {
+  cartaSeleccion.clear();
+  if (e.target.checked) {
+    $("carta-body").querySelectorAll("tr").forEach((tr) => cartaSeleccion.add(+tr.dataset.platoId));
+  }
+  renderCartaSeleccion();
+});
+$("carta-sel-limpiar").addEventListener("click", () => {
+  cartaSeleccion.clear();
+  renderCartaSeleccion();
+});
 
 $("btn-nuevo-plato").addEventListener("click", () => openPlatoModal(null));
 $("btn-aumentar").addEventListener("click", async () => {
   const monto = +$("aumento-monto").value;
   if (!monto) return toast("Ingresá el monto de aumento.", "error");
-  if (!confirm(`¿Aumentar TODOS los precios (efectivo y lista) en ${money(monto)}?`)) return;
-  const r = await api("/api/platos/aumentar", { method: "POST", body: JSON.stringify({ monto }) });
+  const ids = seleccionCarta();
+  if (!confirm(`¿Aumentar los precios (efectivo y lista) ${alcanceDe(ids)} en ${money(monto)}?`)) return;
+  const r = await api("/api/platos/aumentar", { method: "POST", body: JSON.stringify({ monto, ids }) });
   $("aumento-monto").value = "";
   await loadCatalog(); loadCarta();
   toast(`Listo: ${r.actualizados} platos actualizados.`, "ok");
@@ -2021,8 +2087,9 @@ $("btn-aumentar").addEventListener("click", async () => {
 async function fijarPrecio(campo, inputId, etiqueta) {
   const valor = +$(inputId).value;
   if (!valor && valor !== 0) return toast("Ingresá el precio a fijar.", "error");
-  if (!confirm(`¿Poner el precio ${etiqueta} de TODOS los platos en ${money(valor)}?`)) return;
-  const r = await api("/api/platos/set-precios", { method: "POST", body: JSON.stringify({ [campo]: valor }) });
+  const ids = seleccionCarta();
+  if (!confirm(`¿Poner el precio ${etiqueta} ${alcanceDe(ids)} en ${money(valor)}?`)) return;
+  const r = await api("/api/platos/set-precios", { method: "POST", body: JSON.stringify({ [campo]: valor, ids }) });
   $(inputId).value = "";
   await loadCatalog(); loadCarta();
   toast(`Listo: ${r.actualizados} platos con precio ${etiqueta} = ${money(valor)}.`, "ok");
