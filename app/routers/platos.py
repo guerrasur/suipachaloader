@@ -65,18 +65,35 @@ def borrar_definitivo(plato_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+def _platos_a_actualizar(db: Session, ids: list[int] | None) -> list[Plato]:
+    """Platos sobre los que aplica un cambio masivo de precio.
+
+    Sin ``ids`` (comportamiento histórico) va a todos los activos, excluyendo
+    el "Plato del día" porque su precio se carga a mano cada día. Con ``ids``
+    se respeta exactamente lo tildado en la carta: si el usuario eligió esas
+    filas, esas son las que quiere cambiar. Una lista vacía no actualiza nada
+    (nunca significa "todos").
+    """
+    if ids is None:
+        return (
+            db.query(Plato)
+            .filter(Plato.activo.is_(True), Plato.es_plato_del_dia.is_(False))
+            .all()
+        )
+    if not ids:
+        return []
+    return db.query(Plato).filter(Plato.id.in_(ids)).all()
+
+
 @router.post("/aumentar")
 def aumentar_todos(data: AumentoIn, db: Session = Depends(get_db)):
-    """Suma el mismo monto a ambos precios de todos los platos activos.
+    """Suma el mismo monto a ambos precios de los platos elegidos.
 
-    Se excluye el "Plato del día" (precio manual, como en set-precios). Los
-    pedidos ya cargados conservan su precio (se guarda por ítem).
+    Sin ``ids`` aplica a todos los activos (se excluye el "Plato del día",
+    igual que set-precios). Los pedidos ya cargados conservan su precio (se
+    guarda por ítem).
     """
-    platos = (
-        db.query(Plato)
-        .filter(Plato.activo.is_(True), Plato.es_plato_del_dia.is_(False))
-        .all()
-    )
+    platos = _platos_a_actualizar(db, data.ids)
     for p in platos:
         p.precio_efectivo = max(0.0, p.precio_efectivo + data.monto)
         p.precio_lista = max(0.0, p.precio_lista + data.monto)
@@ -86,20 +103,16 @@ def aumentar_todos(data: AumentoIn, db: Session = Depends(get_db)):
 
 @router.post("/set-precios")
 def fijar_precios(data: SetPreciosIn, db: Session = Depends(get_db)):
-    """Fija masivamente un precio (o los dos) en todos los platos activos.
+    """Fija masivamente un precio (o los dos) en los platos elegidos.
 
     Permite cambiar por separado el precio efectivo y el de lista: se aplica
-    sólo el campo enviado. Se excluye el "Plato del día" (precio manual). Los
-    pedidos ya cargados conservan su precio.
+    sólo el campo enviado. Sin ``ids`` aplica a todos los activos (se excluye
+    el "Plato del día"). Los pedidos ya cargados conservan su precio.
     """
     if data.precio_efectivo is None and data.precio_lista is None:
         raise HTTPException(400, "Indicá al menos un precio a fijar")
 
-    platos = (
-        db.query(Plato)
-        .filter(Plato.activo.is_(True), Plato.es_plato_del_dia.is_(False))
-        .all()
-    )
+    platos = _platos_a_actualizar(db, data.ids)
     for p in platos:
         if data.precio_efectivo is not None:
             p.precio_efectivo = max(0.0, data.precio_efectivo)

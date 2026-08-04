@@ -293,6 +293,20 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .pdd-item-row { padding-bottom: .7rem; margin-bottom: .7rem; border-bottom: 1px dashed var(--line-strong); }
 .pdd-item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
+/* ------------------------------------------- selección de platos en la carta */
+.carta-sel-col { width: 34px; text-align: center; }
+.carta-sel-col input { cursor: pointer; }
+/* Resalta las filas tildadas para no perderlas de vista en una carta larga.
+   Un poco más marcado que --brand-soft, que ya lo usa el hover de la fila. */
+tbody tr.fila-elegida > td { background: #dbe6f8; }
+/* Aviso de que el cambio de precio va sólo a lo tildado (oculto sin selección). */
+.carta-sel-banner {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin-top: .6rem; padding: .45rem .7rem;
+  background: #fff; border: 1px solid var(--brand); border-left-width: 4px;
+  border-radius: var(--radius-sm); font-size: .85rem; font-weight: 500;
+}
+
 /* Remate del formulario: total destacado + botones de guardar. */
 .total-line {
   display: flex; justify-content: space-between; align-items: center; gap: .8rem;
