@@ -343,6 +343,10 @@ tbody tr.fila-elegida > td { background: #dbe6f8; }
 
 /* Ticket para el repartidor. */
 .num-pedido { font-weight: 800; font-size: 1.05rem; text-align: center; }
+/* El ticket se abre desde otros modales (rutas optimizadas, elegir repartidor):
+   con el mismo z-index quedaba tapado por el modal que lo abrió. */
+#modal-ticket { z-index: 60; }
+
 .ticket-canvas-wrap { display: flex; justify-content: center; background: #f2f4f7; border-radius: 10px; padding: .6rem; }
 /* La preview se limita también en alto: un ticket de muchos pedidos es muy
    largo y, con solo max-width, quedaba como una tira que no entraba en el
@@ -351,6 +355,23 @@ tbody tr.fila-elegida > td { background: #dbe6f8; }
   max-width: 340px; max-height: 60vh; width: auto; height: auto;
   object-fit: contain; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
+
+/* Lista de paradas en orden manual (ticket combinado y rutas optimizadas). */
+.orden-lista { list-style: none; margin: .2rem 0 0; padding: 0; }
+.orden-item {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .35rem .5rem; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: #fff; margin-bottom: .3rem; cursor: grab;
+}
+.orden-item.dragging { opacity: .45; }
+.orden-item.drop-target { border-color: var(--brand); background: var(--brand-soft); }
+.orden-num {
+  flex: 0 0 auto; min-width: 1.55rem; height: 1.55rem; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: .82rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.orden-texto { flex: 1 1 auto; font-size: .88rem; line-height: 1.25; min-width: 0; }
+.orden-botones { flex: 0 0 auto; display: flex; gap: .25rem; }
 
 /* Facturación de fin del día: una columna por método de pago. */
 .fact-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .8rem; }

@@ -76,6 +76,12 @@ automáticamente. Al arrancar:
   pedidos, genera **una sola imagen** y **un solo mensaje de contacto** con los
   datos de todos, desde el botón "Ticket por repartidor" o desde cada grupo de
   "Optimizar rutas" (con el orden óptimo y el link de la ruta).
+- **Orden de entrega a mano:** el orden que propone "Optimizar rutas" es una
+  sugerencia; las paradas se reacomodan con ↑/↓ o arrastrándolas, tanto en cada
+  grupo de rutas como en el ticket del repartidor. La imagen (numerada 1, 2,
+  3…), los contactos copiados y el link de la ruta en Maps salen siempre en ese
+  orden, así se le manda al repartidor tal como los tiene que entregar. El
+  orden se mantiene mientras no se recargue la página.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Alertas de demora:** pedidos sin salir pasados X minutos y sin facturar
