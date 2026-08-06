@@ -900,6 +900,69 @@ async function openRepModal() {
   $("modal-rep").classList.add("show");
 }
 
+// -------------------------------------------------- listas de orden manual
+let _arrastrando = null;   // {ol, i} de la fila que se está arrastrando
+
+// Lista de paradas reordenable a mano (botones ↑/↓ y arrastrando), usada tanto
+// en las rutas optimizadas como en el ticket combinado. Muta el mismo array que
+// le pasa el llamador y avisa por `onCambio` después de cada movida, así quien
+// la usa vuelve a leer su propio array ya ordenado (y regenera imagen, links,
+// lo que corresponda; la lista ya se redibujó sola).
+//
+// `etiqueta(item)` devuelve el HTML de la fila y es responsable de escapar.
+function renderListaOrden(ol, items, etiqueta, onCambio) {
+  const mover = (desde, hasta) => {
+    if (desde === hasta || hasta < 0 || hasta >= items.length) return;
+    const [it] = items.splice(desde, 1);
+    items.splice(hasta, 0, it);
+    renderListaOrden(ol, items, etiqueta, onCambio);
+    onCambio();
+  };
+
+  ol.classList.add("orden-lista");   // sin pisar las clases propias del <ol>
+  ol.innerHTML = items.map((it, i) => `
+    <li class="orden-item" draggable="true" data-i="${i}">
+      <span class="orden-num">${i + 1}</span>
+      <span class="orden-texto">${etiqueta(it, i)}</span>
+      <span class="orden-botones">
+        <button type="button" class="btn ghost sm orden-sube" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir">↑</button>
+        <button type="button" class="btn ghost sm orden-baja" ${i === items.length - 1 ? "disabled" : ""} title="Bajar" aria-label="Bajar">↓</button>
+      </span>
+    </li>`).join("");
+
+  ol.querySelectorAll(".orden-item").forEach((li) => {
+    const i = +li.dataset.i;
+    li.querySelector(".orden-sube").addEventListener("click", () => mover(i, i - 1));
+    li.querySelector(".orden-baja").addEventListener("click", () => mover(i, i + 1));
+    li.addEventListener("dragstart", (e) => {
+      _arrastrando = { ol, i };
+      li.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox no arranca el arrastre si no se setea algo en el dataTransfer.
+      e.dataTransfer.setData("text/plain", String(i));
+    });
+    li.addEventListener("dragend", () => {
+      _arrastrando = null;
+      ol.querySelectorAll(".orden-item").forEach((o) => o.classList.remove("dragging", "drop-target"));
+    });
+    li.addEventListener("dragover", (e) => {
+      if (!_arrastrando || _arrastrando.ol !== ol) return;   // no mezclar grupos
+      e.preventDefault();
+      li.classList.add("drop-target");
+    });
+    li.addEventListener("dragleave", () => li.classList.remove("drop-target"));
+    li.addEventListener("drop", (e) => {
+      if (!_arrastrando || _arrastrando.ol !== ol) return;
+      e.preventDefault();
+      const desde = _arrastrando.i;
+      // El re-render se lleva puesto el <li> original, así que su `dragend` no
+      // llega: se limpia acá antes de mover.
+      _arrastrando = null;
+      mover(desde, i);
+    });
+  });
+}
+
 // ---------------------------------------------------------- rutas optimizadas
 $("btn-rutas").addEventListener("click", openRutasModal);
 $("rutas-cerrar").addEventListener("click", () => $("modal-rutas").classList.remove("show"));
@@ -943,16 +1006,13 @@ function renderRutas(r) {
   const nombres = r.repartidores_dia || [];
   let html = "";
   r.grupos.forEach((g, gi) => {
-    const paradas = g.pedidos.map((p, i) =>
-      `<li>${i + 1}. ${escapeHtml(p.cliente_nombre || "(sin nombre)")} — ${escapeHtml(p.cliente_direccion)}${p.numero != null ? ` (N° ${p.numero})` : ""}</li>`
-    ).join("");
     const preseleccion = nombres[gi] || "";
     html += `
       <div class="card" style="margin-top:.8rem;">
         <h3 style="margin:0 0 .4rem;">🛵 Repartidor ${escapeHtml(g.etiqueta)} — ${g.pedidos.length} parada${g.pedidos.length === 1 ? "" : "s"}</h3>
-        <ol style="margin:.2rem 0 .8rem 1.2rem;padding:0;">${paradas}</ol>
-        <div class="row" style="flex-wrap:wrap;align-items:center;">
-          <a class="btn secondary sm" href="${g.maps_link}" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
+        <ol class="orden-lista rutas-orden" data-gi="${gi}"></ol>
+        <div class="row" style="flex-wrap:wrap;align-items:center;margin-top:.6rem;">
+          <a class="btn secondary sm rutas-maps" data-gi="${gi}" href="#" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
           <button type="button" class="btn secondary sm rutas-ticket" data-gi="${gi}">🖼 Ticket del repartidor (${g.pedidos.length})</button>
           <label class="muted" style="margin-left:.4rem;">Asignar a:</label>
           ${rutasSelectHtml(gi, nombres, preseleccion)}
@@ -979,13 +1039,36 @@ function renderRutas(r) {
   cont.innerHTML = html;
   evitarSeleccionDuplicada(cont);
 
+  // Paradas de cada grupo: el orden que sugiere la API es solo el punto de
+  // partida, el usuario lo reacomoda a mano. Cada movida reescribe el link de
+  // Maps del grupo y queda guardada para el ticket combinado.
+  cont.querySelectorAll(".rutas-orden").forEach((ol) => {
+    const gi = +ol.dataset.gi;
+    const g = r.grupos[gi];
+    const link = cont.querySelector(`.rutas-maps[data-gi="${gi}"]`);
+    const pintarLink = () => {
+      link.href = googleMapsRouteLink(g.pedidos.map((p) => p.cliente_direccion));
+    };
+    renderListaOrden(
+      ol,
+      g.pedidos,
+      (p) => `${escapeHtml(p.cliente_nombre || "(sin nombre)")} — ${escapeHtml(p.cliente_direccion)}`
+             + (p.numero != null ? ` <span class="muted">(N° ${p.numero})</span>` : ""),
+      () => {
+        pintarLink();
+        guardarOrdenLote("Repartidor " + g.etiqueta, g.pedidos.map((p) => p.id));
+      },
+    );
+    pintarLink();
+  });
+
   // Ticket combinado del grupo: se mapean los ids del grupo (recortados por la
-  // API de rutas) a los pedidos completos de state.pedidos, en el orden óptimo.
+  // API de rutas) a los pedidos completos de state.pedidos, en el orden actual.
   cont.querySelectorAll(".rutas-ticket").forEach((b) =>
     b.addEventListener("click", () => {
       const g = r.grupos[+b.dataset.gi];
       const peds = g.pedidos.map((gp) => state.pedidos.find((p) => p.id === gp.id)).filter(Boolean);
-      openTicketLote(peds, "Repartidor " + g.etiqueta, { maps_link: g.maps_link });
+      openTicketLote(peds, "Repartidor " + g.etiqueta);
     })
   );
 
@@ -1564,6 +1647,23 @@ function googleMapsSearchLink(direccion) {
   return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(direccionParaMaps(direccion));
 }
 
+// Ruta multi-parada en el orden recibido. Espejo de `google_maps_route_link` en
+// app/routing.py: se arma acá también porque el orden lo puede cambiar el
+// usuario a mano después de que la API devolvió el suyo.
+function googleMapsRouteLink(direccionesEnOrden) {
+  const paradas = (direccionesEnOrden || []).map(direccionParaMaps).filter(Boolean);
+  if (!paradas.length) return "";
+  const origen = direccionParaMaps((_cfgCache && _cfgCache.direccion_local) || "");
+  let url = "https://www.google.com/maps/dir/?api=1&destination="
+    + encodeURIComponent(paradas[paradas.length - 1]) + "&travelmode=driving";
+  if (origen) url += "&origin=" + encodeURIComponent(origen);
+  const intermedias = paradas.slice(0, -1);
+  if (intermedias.length) {
+    url += "&waypoints=" + intermedias.map(encodeURIComponent).join("|");
+  }
+  return url;
+}
+
 function openTicket(p) {
   _ticketPedido = p;
   _ticketLote = null;
@@ -1585,6 +1685,7 @@ function openTicket(p) {
     : "";
   const conRepartidor = p.tipo === "Envío" && !!(p.repartidor || "").trim();
   $("ticket-ruta").style.display = conRepartidor ? "" : "none";
+  $("ticket-orden-wrap").style.display = "none";   // el orden es cosa del lote
   $("ticket-ruta").textContent = "🗺️ Ruta optimizada";
   $("ticket-maps").textContent = "🗺️ Ver dirección en Maps";
   $("ticket-copiar").textContent = "📋 Copiar imagen";
@@ -1607,6 +1708,29 @@ function descargarTicket() {
 
 // ---- Ticket combinado: una imagen + un contacto con todos los pedidos que
 //      lleva un mismo repartidor. Reusa el modal #modal-ticket en modo lote.
+
+// Orden manual de cada lote, recordado mientras dure la sesión (no se guarda en
+// la base): si se reacomodan las paradas en las rutas optimizadas o en el
+// ticket y después se vuelve a abrir, siguen como se las dejó. Se pierde al
+// recargar la página, que es cuando el día ya cambió o se rearmó todo.
+const _ordenLote = new Map();   // "fecha|subtítulo" -> [ids de pedido en orden]
+
+function _claveOrden(subtitulo) { return state.fecha + "|" + (subtitulo || ""); }
+
+function guardarOrdenLote(subtitulo, ids) {
+  _ordenLote.set(_claveOrden(subtitulo), ids);
+}
+
+// Aplica el orden guardado (si hay). Los pedidos que no estaban cuando se
+// ordenó —uno nuevo del mismo repartidor— quedan al final.
+function aplicarOrdenGuardado(pedidos, subtitulo) {
+  const ids = _ordenLote.get(_claveOrden(subtitulo));
+  if (!ids) return [...pedidos];
+  const pos = new Map(ids.map((id, i) => [id, i]));
+  return [...pedidos].sort(
+    (a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e9) - (pos.has(b.id) ? pos.get(b.id) : 1e9)
+  );
+}
 
 // "Paga con" legible desde el detalle de efectivo (texto libre con dígitos).
 function _pagaConTexto(p) {
@@ -1636,13 +1760,15 @@ function drawTicketLote(pedidos, subtitulo) {
     + (efectivoTotal > 0 ? ` · Efectivo a cobrar: ${money(efectivoTotal)}` : "");
   L.linea(resumen, fitFont(mc, resumen, ANCHO, "bold", [26, 24, 22, 20]), "#111", "center", W / 2);
 
-  // --- Un bloque por pedido -------------------------------------------------
-  for (const p of pedidos) {
+  // --- Un bloque por pedido, en orden de entrega ----------------------------
+  // El número de parada va adelante del N° de pedido: el repartidor los tiene
+  // que entregar en ese orden, y es el orden que el usuario acomodó a mano.
+  pedidos.forEach((p, i) => {
     L.espacio(20);
     L.separador(M, W - M);
     L.espacio(14);
 
-    const num = p.numero != null ? "N° " + p.numero : "#" + p.id;
+    const num = `${i + 1})  ` + (p.numero != null ? "N° " + p.numero : "#" + p.id);
     const ffNum = fuente("900", 34);
     mc.font = ffNum.font;
     const anchoNum = mc.measureText(num).width;
@@ -1683,19 +1809,19 @@ function drawTicketLote(pedidos, subtitulo) {
       for (const l of wrapText(mc, p.indicaciones, ANCHO)) L.linea(l, ffInd, "#555", "left", M);
     }
     L.espacio(10);
-  }
+  });
 
   pintarLayout($("ticket-canvas"), L.ops, W, Math.round(L.y + M), S);
 }
 
 function contactoLote(pedidos, subtitulo) {
   const cab = `🛵 ${subtitulo || "Repartidor"} — ${fmtFecha(state.fecha)} — ${pedidos.length} pedido${pedidos.length === 1 ? "" : "s"}`;
-  const bloques = pedidos.map((p) => {
+  const bloques = pedidos.map((p, i) => {
     const cobro = p.metodo_pago === "Efectivo"
       ? `Cobrar ${money(p.total)}${_pagaConTexto(p) ? " (paga con " + _pagaConTexto(p) + ")" : ""}`
       : `Pagado (${p.metodo_pago})`;
     return [
-      `${p.numero != null ? "N° " + p.numero : "#" + p.id} — ${p.cliente_nombre || "(sin nombre)"}`,
+      `${i + 1}) ${p.numero != null ? "N° " + p.numero : "#" + p.id} — ${p.cliente_nombre || "(sin nombre)"}`,
       p.cliente_telefono ? "Tel: " + p.cliente_telefono : "",
       p.cliente_direccion || "",
       p.indicaciones ? "(" + p.indicaciones + ")" : "",
@@ -1706,30 +1832,56 @@ function contactoLote(pedidos, subtitulo) {
   return cab + "\n\n" + bloques.join("\n————————\n");
 }
 
-function openTicketLote(pedidos, titulo, opts = {}) {
+function openTicketLote(pedidos, titulo) {
   if (!pedidos || !pedidos.length) { toast("Ese repartidor no tiene pedidos para el ticket.", "info"); return; }
   _ticketPedido = null;
-  _ticketLote = pedidos;
+  _ticketLote = aplicarOrdenGuardado(pedidos, titulo);
   _ticketSubtitulo = titulo;
   $("ticket-title").textContent = "Ticket — " + titulo;
-  drawTicketLote(pedidos, titulo);
   // Botones: en lote no aplican WhatsApp-cliente ni "Ruta optimizada" (son por
-  // pedido). Maps se muestra solo si viene el link de la ruta óptima del grupo.
+  // pedido). El link de Maps se arma acá con el orden que tenga el lote en este
+  // momento, así sigue al orden manual igual que la imagen.
   $("ticket-contacto").style.display = "";
   $("ticket-contacto").textContent = "👤 Copiar contactos";
   $("ticket-copiar").textContent = "📋 Copiar imagen";
   $("ticket-wa").style.display = "none";
   $("ticket-ruta").style.display = "none";
-  if (opts.maps_link) {
-    $("ticket-maps").style.display = "";
-    $("ticket-maps").href = opts.maps_link;
-    $("ticket-maps").textContent = "🗺️ Ver ruta en Maps";
-  } else {
-    $("ticket-maps").style.display = "none";
-  }
   $("ticket-maps-query").textContent = "";
   $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos y direcciones de todos los pedidos.";
+  refrescarTicketLote();
   $("modal-ticket").classList.add("show");
+}
+
+// Redibuja la imagen y rearma el link de Maps con el orden actual del lote.
+function pintarTicketLote() {
+  const pedidos = _ticketLote;
+  drawTicketLote(pedidos, _ticketSubtitulo);
+  const maps = $("ticket-maps");
+  const direcciones = pedidos.map((p) => (p.cliente_direccion || "").trim()).filter(Boolean);
+  const link = googleMapsRouteLink(direcciones);
+  maps.style.display = link ? "" : "none";
+  maps.href = link || "#";
+  maps.textContent = direcciones.length > 1 ? "🗺️ Ver ruta en Maps" : "🗺️ Ver dirección en Maps";
+}
+
+// Imagen + link + panel para reacomodar las paradas a mano.
+function refrescarTicketLote() {
+  const pedidos = _ticketLote;
+  pintarTicketLote();
+  // El panel de orden solo tiene sentido con más de una parada.
+  $("ticket-orden-wrap").style.display = pedidos.length > 1 ? "" : "none";
+  if (pedidos.length < 2) return;
+  renderListaOrden(
+    $("ticket-orden"),
+    pedidos,
+    (p) => `<strong>${p.numero != null ? "N° " + p.numero : "#" + p.id}</strong> `
+           + escapeHtml(p.cliente_nombre || "(sin nombre)")
+           + (p.cliente_direccion ? ` — ${escapeHtml(p.cliente_direccion)}` : ""),
+    () => {
+      guardarOrdenLote(_ticketSubtitulo, pedidos.map((p) => p.id));
+      pintarTicketLote();
+    },
+  );
 }
 
 $("ticket-cerrar").addEventListener("click", () => $("modal-ticket").classList.remove("show"));

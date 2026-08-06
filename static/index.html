@@ -367,6 +367,11 @@
       <div class="ticket-canvas-wrap">
         <canvas id="ticket-canvas"></canvas>
       </div>
+      <div id="ticket-orden-wrap" style="display:none;margin-top:.9rem;">
+        <h3 style="margin:0 0 .15rem;font-size:.95rem;">Orden de entrega</h3>
+        <p class="muted" style="font-size:.8rem;margin:0 0 .5rem;">Acomodalas como las tiene que entregar: la imagen, los contactos y la ruta en Maps salen en este orden.</p>
+        <ol class="orden-lista" id="ticket-orden"></ol>
+      </div>
       <div class="row" style="margin-top:.8rem;flex-wrap:wrap;">
         <button class="btn" id="ticket-copiar">📋 Copiar imagen</button>
         <button class="btn secondary" id="ticket-descargar">⬇ Descargar</button>
@@ -388,7 +393,7 @@
     <div class="modal modal-wide">
       <h2>Rutas optimizadas</h2>
       <p class="muted" id="rutas-fecha" style="margin-top:0;"></p>
-      <p class="muted" style="font-size:.85rem;">Agrupa los envíos pendientes de salir por cercanía entre los repartidores del día. Revisá el orden sugerido, abrí el mapa y confirmá la asignación.</p>
+      <p class="muted" style="font-size:.85rem;">Agrupa los envíos pendientes de salir por cercanía entre los repartidores del día. Reacomodá las paradas con ↑/↓ (o arrastrándolas) si preferís otro orden, abrí el mapa y confirmá la asignación.</p>
       <div id="rutas-contenido"></div>
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn ghost" id="rutas-cerrar">Cerrar</button>
