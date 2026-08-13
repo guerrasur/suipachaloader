@@ -104,6 +104,14 @@ function precioSegunMetodo(plato) {
   return $("f-pago").value === "Efectivo" ? plato.precio_efectivo : plato.precio_lista;
 }
 
+// Plato del día cargado que coincida por nombre (ignorando mayúsculas y
+// espacios sobrantes), o null si no hay ninguno.
+function pddPorNombre(nombre) {
+  const buscado = (nombre || "").trim().toLowerCase();
+  if (!buscado || !state.platoDia.hay) return null;
+  return state.platoDia.items.find((x) => (x.nombre || "").trim().toLowerCase() === buscado) || null;
+}
+
 function addItem(pdd = false, pddIdx = 0) {
   if (pdd) {
     // Se precarga con el plato del día elegido para la fecha (nombre y
@@ -164,7 +172,7 @@ function renderItems() {
       ${selHtml}
       <input type="number" min="1" data-idx="${idx}" class="it-cant" value="${it.cantidad}" />
       <input type="number" step="100" min="0" data-idx="${idx}" class="it-precio" value="${it.precio_unitario}" />
-      <span class="right nowrap">${money(it.cantidad * it.precio_unitario)}</span>
+      <span class="right nowrap it-total" data-idx="${idx}">${money(it.cantidad * it.precio_unitario)}</span>
       <button type="button" class="btn ghost sm" data-idx="${idx}" title="Quitar">✕</button>`;
     cont.appendChild(line);
   });
@@ -183,16 +191,46 @@ function renderItems() {
   cont.querySelectorAll(".it-nombre").forEach((s) =>
     s.addEventListener("input", (e) => { state.items[+e.target.dataset.idx].nombre = e.target.value; })
   );
-  cont.querySelectorAll(".it-cant").forEach((s) =>
-    s.addEventListener("input", (e) => { state.items[+e.target.dataset.idx].cantidad = Math.max(1, +e.target.value || 1); renderItems(); recalc(); })
-  );
-  cont.querySelectorAll(".it-precio").forEach((s) =>
-    s.addEventListener("input", (e) => { state.items[+e.target.dataset.idx].precio_unitario = +e.target.value || 0; renderItems(); recalc(); })
-  );
+  // Cantidad y precio se tipean: acá NO se puede llamar a renderItems(), que
+  // rearma la lista entera y destruye el input enfocado a mitad del tipeo. Se
+  // actualiza state, el total de esa línea y los totales del pedido, nada más.
+  // Por lo mismo tampoco se reescribe el value del input mientras se escribe
+  // (mover el value corre el cursor al final): lo que haya que normalizar se
+  // normaliza en "blur".
+  cont.querySelectorAll(".it-cant").forEach((s) => {
+    s.addEventListener("input", (e) => {
+      const i = +e.target.dataset.idx;
+      state.items[i].cantidad = Math.max(1, +e.target.value || 1);
+      actualizarTotalLinea(i); recalc();
+    });
+    s.addEventListener("blur", (e) => {
+      const i = +e.target.dataset.idx;
+      if (+e.target.value !== state.items[i].cantidad) e.target.value = state.items[i].cantidad;
+    });
+  });
+  cont.querySelectorAll(".it-precio").forEach((s) => {
+    s.addEventListener("input", (e) => {
+      const i = +e.target.dataset.idx;
+      state.items[i].precio_unitario = +e.target.value || 0;
+      actualizarTotalLinea(i); recalc();
+    });
+    s.addEventListener("blur", (e) => {
+      const i = +e.target.dataset.idx;
+      if (+e.target.value !== state.items[i].precio_unitario) e.target.value = state.items[i].precio_unitario;
+    });
+  });
   cont.querySelectorAll("button[data-idx]").forEach((b) =>
     b.addEventListener("click", (e) => { state.items.splice(+e.currentTarget.dataset.idx, 1); renderItems(); recalc(); })
   );
   recalc();
+}
+
+// Actualiza sólo el subtotal de una línea, sin rearmar la lista (ver los
+// handlers de cantidad/precio).
+function actualizarTotalLinea(idx) {
+  const it = state.items[idx];
+  const span = $("items-list").querySelector(`.it-total[data-idx="${idx}"]`);
+  if (it && span) span.textContent = money(it.cantidad * it.precio_unitario);
 }
 
 // Re-aplicar precio según método a los ítems de catálogo y al plato del día
@@ -1377,8 +1415,15 @@ function renderRow(p) {
 
   // inline handlers
   tr.querySelector(".r-rep")?.addEventListener("change", (e) => patch(p.id, { repartidor: e.target.value }));
-  tr.querySelector(".r-sal")?.addEventListener("change", (e) =>
-    patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null }));
+  // Guarda en "blur", no en "change": un <input type="time"> dispara "change"
+  // apenas queda completa cada parte de la hora, y como patch() reemplaza la
+  // fila entera, eso movía el cursor a mitad de la edición. Al salir del campo
+  // se manda una sola vez, y sólo si el valor cambió (así hacer foco y salir
+  // sin tocar nada no dispara un PATCH ni redibuja la fila).
+  tr.querySelector(".r-sal")?.addEventListener("blur", (e) => {
+    if (e.target.value === hs) return;
+    patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null });
+  });
   tr.querySelector(".r-salio")?.addEventListener("click", () => {
     const ahora = new Date();
     const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
@@ -1452,11 +1497,27 @@ async function borrarDefinitivo(p) {
 
 function editarPedido(p) {
   state.editId = p.id;
-  state.items = p.items.map((i) => ({
-    plato_id: i.plato_id, nombre: i.nombre,
-    precio_unitario: i.precio_unitario, cantidad: i.cantidad,
-    es_pdd: i.plato_id == null,
-  }));
+  state.items = p.items.map((i) => {
+    const item = {
+      plato_id: i.plato_id, nombre: i.nombre,
+      precio_unitario: i.precio_unitario, cantidad: i.cantidad,
+      es_pdd: i.plato_id == null,
+    };
+    // El pedido guardado no trae los dos precios del plato del día (sólo el
+    // unitario cobrado), así que reapplyPrices() no podría reajustarlo al
+    // cambiar el método de pago. Los recuperamos del plato del día cargado
+    // buscándolo por nombre. Si no coincide (nombre escrito a mano, o pedido
+    // de otra fecha) queda sin los dos precios y no se toca al cambiar el
+    // método, igual que hasta ahora.
+    if (item.es_pdd) {
+      const pdd = pddPorNombre(item.nombre);
+      if (pdd) {
+        item.precio_efectivo = pdd.precio_efectivo;
+        item.precio_lista = pdd.precio_lista;
+      }
+    }
+    return item;
+  });
   $("f-fecha").value = p.fecha;
   $("f-tipo").value = p.tipo;
   $("f-cliente").value = p.cliente_nombre;
