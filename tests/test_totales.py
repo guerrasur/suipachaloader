@@ -23,7 +23,7 @@ def test_subtotal_suma_items():
 
 
 def test_envio_solo_para_tipo_envio():
-    assert monto_envio(_pedido(tipo="Take away", costo_envio=3000)) == 0
+    assert monto_envio(_pedido(tipo="Reserva", costo_envio=3000)) == 0
     assert monto_envio(_pedido(tipo="Envío", costo_envio=3000, no_cobrar_envio=True)) == 0
     assert monto_envio(_pedido(tipo="Envío", costo_envio=3000)) == 3000
 

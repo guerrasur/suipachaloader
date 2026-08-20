@@ -2,7 +2,7 @@
 FECHA = "2030-03-05"
 
 
-def _crear(client, metodo, total_item, tipo="Take away", **extra):
+def _crear(client, metodo, total_item, tipo="Reserva", **extra):
     body = {
         "fecha": FECHA,
         "cliente_nombre": "Test",

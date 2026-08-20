@@ -78,9 +78,7 @@
               <label>Tipo</label>
               <select id="f-tipo">
                 <option>Envío</option>
-                <option>Take away</option>
                 <option>Reserva</option>
-                <option>Ventanilla</option>
               </select>
             </div>
             <div class="field">
@@ -177,14 +175,12 @@
           <button class="chip" data-f="pend-salir">Pendientes de salir</button>
           <button class="chip" data-f="pend-facturar">Pendientes de facturar</button>
           <button class="chip" data-f="envio">Envío</button>
-          <button class="chip" data-f="takeaway">Take away</button>
           <button class="chip" data-f="reserva">Reserva</button>
-          <button class="chip" data-f="ventanilla">Ventanilla</button>
           <button type="button" class="btn secondary sm" id="btn-ticket-repartidor" title="Una imagen y un contacto con todos los pedidos de un repartidor" style="margin-left:auto;">🛵 Ticket por repartidor</button>
           <button type="button" class="btn secondary sm" id="btn-rutas" title="Agrupar los envíos pendientes por cercanía">🗺️ Optimizar rutas</button>
         </div>
         <div class="leyenda muted">
-          <span><i class="dot dot-ok"></i> Salió</span>
+          <span><i class="dot dot-ok"></i> Salió / Reservado</span>
           <span><i class="dot dot-danger"></i> Demorado</span>
           <span><i class="dot dot-warn"></i> Sin facturar (tarde)</span>
           <span><i class="dot dot-anulado"></i> Anulado</span>

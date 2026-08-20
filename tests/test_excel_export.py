@@ -17,7 +17,7 @@ PRIMERA_FILA = 3  # fila 1 título, fila 2 encabezados
 
 
 def _crear(client, **extra):
-    body = {"fecha": FECHA, "cliente_nombre": "Test", "tipo": "Take away", **extra}
+    body = {"fecha": FECHA, "cliente_nombre": "Test", "tipo": "Reserva", **extra}
     r = client.post("/api/pedidos", json=body)
     assert r.status_code == 200, r.text
     return r.json()

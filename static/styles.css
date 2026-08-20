@@ -201,7 +201,7 @@ td .inline:focus { border-color: var(--brand); background: #fff; outline: none; 
 .td-items { max-width: 260px; }
 td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 
-/* Pill neutra para el tipo de pedido (Envío / Take away / ...). */
+/* Pill neutra para el tipo de pedido (Envío / Reserva). */
 .tipo-pill {
   display: inline-block; background: var(--panel); border: 1px solid var(--line);
   border-radius: 999px; padding: .05rem .5rem; font-size: .75rem; font-weight: 600;
@@ -250,6 +250,11 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
 .r-pagado.pagado-si:hover { background: #17703d; }
 .r-pagado.pagado-no { background: var(--warn-bg); color: var(--warn); border: 1px solid #f0d59a; }
 .r-pagado.pagado-no:hover { background: #ffe9c2; }
+
+/* Botón "Reservado" de los pedidos tipo Reserva: azul mientras está
+   pendiente, verde una vez marcado (la fila se pinta de verde también). */
+.r-reservado.reservado-si { background: var(--ok); }
+.r-reservado.reservado-si:hover { background: #17703d; }
 
 /* -------------------------------------------------------------- resumen */
 .resumen-card summary {
