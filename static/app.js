@@ -301,14 +301,7 @@ function toggleVuelto() {
   $("wrap-vuelto").style.display = $("f-pago").value === "Efectivo" ? "" : "none";
   $("f-pago").className = "select-pago " + pagoClase($("f-pago").value);
 }
-function toggleVentanilla() {
-  // Ventanilla: sin dirección/indicaciones/repartidor.
-  const v = $("f-tipo").value === "Ventanilla";
-  $("f-direccion").closest(".field").style.display = v ? "none" : "";
-  $("f-indicaciones").closest(".field").style.display = v ? "none" : "";
-  $("wrap-repartidor").style.display = v ? "none" : "";
-}
-$("f-tipo").addEventListener("change", () => { toggleEnvio(); toggleVentanilla(); checkHoraLimite(); });
+$("f-tipo").addEventListener("change", () => { toggleEnvio(); checkHoraLimite(); });
 
 async function checkHoraLimite() {
   const b = $("banner-hora");
@@ -355,8 +348,8 @@ $("pedido-form").addEventListener("submit", async (e) => {
     notas: $("f-notas").value.trim(),
   };
   // Confirmar si faltan datos críticos (el medio de pago siempre trae un valor
-  // en el select, así que no se chequea). Ventanilla/Take away no llevan
-  // dirección, por eso la dirección solo es crítica en Envío.
+  // en el select, así que no se chequea). Las reservas se retiran por el
+  // local, por eso la dirección solo es crítica en Envío.
   const faltan = [];
   if (!body.cliente_nombre) faltan.push("nombre");
   if (body.tipo === "Envío" && !body.cliente_direccion) faltan.push("dirección");
@@ -412,7 +405,7 @@ function resetForm() {
   $("form-title").textContent = "📝 Nuevo pedido";
   $("btn-guardar").textContent = "Guardar pedido";
   fillRepartidorSelect($("f-repartidor"), repartidorDefault());
-  renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla(); checkHoraLimite();
+  renderItems(); toggleEnvio(); toggleVuelto(); checkHoraLimite();
 }
 
 // Si hay un único repartidor cargado para el día, se propone por defecto en
@@ -838,7 +831,7 @@ function aplicarParseWA(res) {
       };
     });
   }
-  renderItems(); toggleEnvio(); toggleVentanilla(); recalc(); updateVueltoCalc();
+  renderItems(); toggleEnvio(); recalc(); updateVueltoCalc();
 }
 
 // Resumen visible de lo detectado y lo que falta.
@@ -1349,9 +1342,7 @@ function pasaFiltro(p) {
   switch (state.filtro) {
     case "pend-salir": return p.tipo === "Envío" && !p.hora_salida && !p.anulado;
     case "pend-facturar": return !p.facturado && !p.anulado;
-    case "ventanilla": return p.tipo === "Ventanilla";
     case "envio": return p.tipo === "Envío";
-    case "takeaway": return p.tipo === "Take away";
     case "reserva": return p.tipo === "Reserva";
     default: return true;
   }
@@ -1366,6 +1357,11 @@ function renderTabla() {
   const tb = $("tabla-body");
   tb.innerHTML = "";
   state.pedidos.filter(pasaFiltro).forEach((p) => tb.appendChild(renderRow(p)));
+}
+
+function hhmmAhora() {
+  const a = new Date();
+  return String(a.getHours()).padStart(2, "0") + ":" + String(a.getMinutes()).padStart(2, "0");
 }
 
 function renderRow(p) {
@@ -1388,7 +1384,13 @@ function renderRow(p) {
   // celda "Estado" para poder leerlo de un vistazo.
   const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
                  (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span> ' : "");
-  const salida = p.hora_salida
+  // Las reservas no "salen" con un repartidor: se retiran por el local, así
+  // que en vez de "Salió" llevan un botón "Reservado" que se marca (azul ->
+  // verde). Es el mismo dato de fondo (hora_salida), por eso la fila queda
+  // verde igual que en los envíos ya despachados.
+  const salida = p.tipo === "Reserva"
+    ? `<button class="btn sm r-reservado ${p.hora_salida ? "reservado-si" : ""}" ${p.anulado ? "disabled" : ""} title="${p.hora_salida ? "Reservado — clic para deshacer" : "Marcar la reserva como lista"}">✔ Reservado</button>${p.hora_salida ? ` <small class="muted">${hs}</small>` : ""}`
+    : p.hora_salida
     ? `<span class="badge salio">🛵 SALIÓ</span> <input class="inline r-sal" type="time" value="${hs}" ${p.anulado ? "disabled" : ""} />
        <button type="button" class="btn ghost sm r-des-salio" ${p.anulado ? "disabled" : ""} title="Deshacer: marcar que todavía no salió">✕</button>`
     : `<button class="btn ok sm r-salio" ${p.anulado ? "disabled" : ""} title="Marcar que el pedido salió ahora">🛵 Salió</button>`;
@@ -1425,11 +1427,13 @@ function renderRow(p) {
     patch(p.id, { hora_salida: e.target.value ? `${state.fecha}T${e.target.value}:00` : null });
   });
   tr.querySelector(".r-salio")?.addEventListener("click", () => {
-    const ahora = new Date();
-    const hhmmAhora = String(ahora.getHours()).padStart(2, "0") + ":" + String(ahora.getMinutes()).padStart(2, "0");
-    patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora}:00` });
+    patch(p.id, { hora_salida: `${state.fecha}T${hhmmAhora()}:00` });
   });
   tr.querySelector(".r-des-salio")?.addEventListener("click", () => patch(p.id, { hora_salida: null }));
+  // El botón de las reservas es un toggle: marcar y desmarcar con el mismo clic.
+  tr.querySelector(".r-reservado")?.addEventListener("click", () => {
+    patch(p.id, { hora_salida: p.hora_salida ? null : `${state.fecha}T${hhmmAhora()}:00` });
+  });
   tr.querySelector(".r-pagado")?.addEventListener("click", () => patch(p.id, { pagado: !p.pagado }));
   tr.querySelector(".r-fac")?.addEventListener("change", (e) => patch(p.id, { facturado: e.target.checked }));
   tr.querySelector(".r-not")?.addEventListener("change", (e) => patch(p.id, { notas: e.target.value }));
@@ -1534,7 +1538,7 @@ function editarPedido(p) {
   $("f-notas").value = p.notas;
   $("form-title").textContent = "✎ Editar pedido N° " + (p.numero ?? p.id);
   $("btn-guardar").textContent = "Guardar cambios";
-  renderItems(); toggleEnvio(); toggleVuelto(); toggleVentanilla();
+  renderItems(); toggleEnvio(); toggleVuelto();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

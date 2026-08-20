@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
 # --- Valores admitidos (se validan en los schemas, no en la BD) -------------
-TIPOS_PEDIDO = ("Take away", "Envío", "Reserva", "Ventanilla")
+TIPOS_PEDIDO = ("Envío", "Reserva")
 METODOS_PAGO = ("Transferencia", "Efectivo", "QR", "Posnet")
 TIPOS_DESCUENTO = ("monto", "porcentaje")
 

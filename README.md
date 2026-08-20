@@ -86,7 +86,8 @@ automáticamente. Al arrancar:
   notas), filtros rápidos y navegación entre días.
 - **Alertas de demora:** pedidos sin salir pasados X minutos y sin facturar
   después de la hora configurada; aviso de pendientes de días anteriores.
-- **Pedidos para el día siguiente** (fecha futura) y **ventas de ventanilla**.
+- **Pedidos para el día siguiente** (fecha futura) y **reservas** para
+  retirar por el local (se marcan con el botón "Reservado", no con "Salió").
 - **Anulación** de pedidos (nunca se borran; no suman ni alertan).
 - **Resumen de caja** del día por método de pago.
 - **Facturación de fin del día:** menú con la cantidad vendida de cada ítem

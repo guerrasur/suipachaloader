@@ -88,6 +88,23 @@ def _migrar_plato_dia_items() -> None:
         print(f"[aviso] No se pudo migrar plato_dia_items: {e}")
 
 
+def _migrar_tipos_pedido() -> None:
+    """Los tipos "Take away" y "Ventanilla" ya no existen: los dos
+    eran retiros en el local, igual que "Reserva", así que los pedidos viejos
+    pasan a ese tipo. Sin esto, editar un pedido histórico rompía con 422
+    (el tipo guardado ya no está en TIPOS_PEDIDO). Idempotente."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE pedidos SET tipo = 'Reserva'"
+                    " WHERE tipo IN ('Take away', 'Ventanilla')"
+                )
+            )
+    except Exception as e:  # nunca impedir el arranque por esto
+        print(f"[aviso] No se pudieron migrar los tipos de pedido: {e}")
+
+
 def _indice_unico_numero() -> None:
     """Garantiza que no haya dos pedidos con el mismo número el mismo día.
 
@@ -121,6 +138,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrar_columnas()
     _migrar_plato_dia_items()
+    _migrar_tipos_pedido()
     _indice_unico_numero()
     db = SessionLocal()
     try:

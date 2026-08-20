@@ -31,7 +31,7 @@ def test_patch_valido_sigue_funcionando(client):
 def test_descuento_negativo_no_infla_total(client):
     p = _crear(
         client,
-        tipo="Take away",
+        tipo="Reserva",
         items=[{"nombre": "Milanesa", "cantidad": 1, "precio_unitario": 10000}],
         descuento_tipo="monto",
         descuento_valor=-500,
@@ -42,7 +42,7 @@ def test_descuento_negativo_no_infla_total(client):
 def test_porcentaje_mayor_a_cien(client):
     p = _crear(
         client,
-        tipo="Take away",
+        tipo="Reserva",
         items=[{"nombre": "Milanesa", "cantidad": 1, "precio_unitario": 10000}],
         descuento_tipo="porcentaje",
         descuento_valor=150,
