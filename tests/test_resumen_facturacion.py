@@ -60,3 +60,20 @@ def test_facturacion_no_cuenta_envio_gratis(client):
     assert ef["pedidos"] == 2
     assert ef["envios"] == 1          # sólo el cobrado
     assert ef["total"] == 23000       # 10000 + (10000 + 3000)
+
+
+def test_facturacion_excluye_ya_facturados(client):
+    # Un pedido ya marcado como facturado no debe volver a figurar en la
+    # planilla de cierre (ítems, envíos ni total a facturar), aunque siga
+    # contando para el conteo de pedidos/facturados del método.
+    pendiente = _crear(client, "Efectivo", 10000)
+    facturado = _crear(client, "Efectivo", 10000, tipo="Envío", costo_envio=3000)
+    client.patch(f"/api/pedidos/{facturado['id']}", json={"facturado": True})
+
+    ef = client.get(f"/api/facturacion?fecha={FECHA}").json()["por_metodo"]["Efectivo"]
+    assert ef["pedidos"] == 2
+    assert ef["facturados"] == 1
+    assert ef["envios"] == 0                                   # el envío ya facturado no cuenta
+    assert ef["items"] == [{"nombre": "Milanesa", "cantidad": 1}]  # sólo el pendiente
+    assert ef["total"] == 23000                                # sigue sumando para el total del día
+    assert pendiente["id"] != facturado["id"]

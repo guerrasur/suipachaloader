@@ -101,6 +101,10 @@ def facturacion(fecha: date | None = None, db: Session = Depends(get_db)):
         b["total"] += p.total
         if p.facturado:
             b["facturados"] += 1
+            # Ya facturado: no vuelve a figurar en la lista de ítems/envíos
+            # a facturar (si no, quedaba pendiente para siempre en la
+            # planilla de cierre aunque ya se hubiera pasado al sistema).
+            continue
         # Envío facturable: tipo "Envío" que efectivamente se cobra. Los
         # marcados "no cobrar envío" no se facturan, así que no se cuentan
         # (si no, al facturar se les sumaba igual el costo del envío).
