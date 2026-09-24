@@ -168,16 +168,69 @@ def _mejorar_2opt(origen: Punto | None, puntos: list[Punto], orden: list[int]) -
     return mejor
 
 
-def ordenar_ruta(origen: Punto | None, puntos: list[Punto]) -> list[int]:
-    """Orden de recorrido (índices de `puntos`) optimizado para una ruta abierta.
+def _orden_exacto(origen: Punto | None, puntos: list[Punto]) -> list[int]:
+    """Camino abierto mínimo por programación dinámica (Held-Karp).
 
-    Parte de vecino más cercano y aplica 2-opt. Si no hay origen configurado,
-    prueba cada parada como inicio para no depender del orden en que llegaron
-    los pedidos.
+    Para los volúmenes normales del local es suficientemente chico y evita
+    mínimos locales del vecino más cercano/2-opt. Si no hay origen, cualquier
+    parada puede ser la primera sin costo inicial.
+    """
+    n = len(puntos)
+    # (máscara, último) -> (distancia, tupla de índices)
+    estados: dict[tuple[int, int], tuple[float, tuple[int, ...]]] = {}
+
+    for i in range(n):
+        costo = 0.0 if origen is None else _dist(origen, puntos[i])
+        estados[(1 << i, i)] = (costo, (i,))
+
+    for tam in range(2, n + 1):
+        nuevos: dict[tuple[int, int], tuple[float, tuple[int, ...]]] = {}
+        for mask in range(1, 1 << n):
+            if mask.bit_count() != tam:
+                continue
+            for ultimo in range(n):
+                bit_ultimo = 1 << ultimo
+                if not (mask & bit_ultimo):
+                    continue
+                previo_mask = mask ^ bit_ultimo
+                mejor: tuple[float, tuple[int, ...]] | None = None
+                for previo in range(n):
+                    if not (previo_mask & (1 << previo)):
+                        continue
+                    base = estados.get((previo_mask, previo))
+                    if base is None:
+                        continue
+                    candidato = (
+                        base[0] + _dist(puntos[previo], puntos[ultimo]),
+                        base[1] + (ultimo,),
+                    )
+                    if mejor is None or candidato < mejor:
+                        mejor = candidato
+                if mejor is not None:
+                    nuevos[(mask, ultimo)] = mejor
+        estados.update(nuevos)
+
+    completo = (1 << n) - 1
+    opciones = [
+        valor
+        for (mask, _ultimo), valor in estados.items()
+        if mask == completo
+    ]
+    return list(min(opciones)[1])
+
+
+def ordenar_ruta(origen: Punto | None, puntos: list[Punto]) -> list[int]:
+    """Orden de recorrido (índices de `puntos`) para una ruta abierta.
+
+    Hasta 12 paradas calcula el mínimo exacto por distancia geográfica. Para
+    lotes excepcionalmente grandes usa vecino más cercano + 2-opt para evitar
+    que el tiempo de cálculo crezca exponencialmente.
     """
     n = len(puntos)
     if n <= 1:
         return list(range(n))
+    if n <= 12:
+        return _orden_exacto(origen, puntos)
 
     if origen is not None:
         inicial = _vecino_mas_cercano(origen, puntos)
