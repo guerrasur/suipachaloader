@@ -78,6 +78,7 @@ header.topbar h1 {
 .tabs button:active { transform: translateY(1px); }
 .tabs button.active { background: #fff; color: var(--brand); box-shadow: var(--shadow-sm); }
 .tabs button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.5); }
+.tabs button[data-tab="judiciales"] { text-decoration: line-through; text-decoration-thickness: 2px; }
 
 main { padding: 1.15rem; max-width: 1400px; margin: 0 auto; }
 .view { display: none; }
@@ -515,6 +516,8 @@ tbody tr.fila-elegida > td { background: #dbe6f8; }
 
 /* ---------------------------------------------------------- Cierre Judiciales */
 .judiciales-card { max-width: 1120px; }
+.judiciales-unavailable { text-align: center; padding: 2rem 1rem; }
+.judiciales-unavailable p { margin: 0; font-weight: 600; }
 .judiciales-heading { gap: 1rem; align-items: flex-start; }
 .jud-drop {
   margin: 1rem 0;
