@@ -166,6 +166,12 @@ tbody tr { transition: background .1s ease; }
 tbody tr:nth-child(even) { background: #fafbfd; }
 tbody tr:hover { background: var(--brand-soft); }
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
+.clientes-heading { align-items: center; margin-bottom: .8rem; }
+.clientes-heading p { margin: 0; font-size: .82rem; }
+.clientes-search { min-width: min(100%, 300px); }
+.clientes-actions { white-space: nowrap; }
+#modal-cliente .field { margin-top: .65rem; }
+#modal-cliente .field input, #modal-cliente .field textarea { width: 100%; }
 /* Estados de fila: fondo pastel legible + barra izquierda con el color del
    estado (mismo código que la leyenda sobre la tabla). */
 tr.anulado { background: var(--danger-bg) !important; box-shadow: inset 4px 0 0 var(--danger-strong); }
@@ -447,7 +453,7 @@ tbody tr.fila-elegida > td { background: #dbe6f8; }
   header.topbar { padding: .5rem .8rem; }
   header.topbar h1 { font-size: 1.05rem; width: 100%; }
   .tabs { margin-left: 0; width: 100%; }
-  .tabs button { flex: 1; text-align: center; }
+  .tabs button { flex: 1; text-align: center; padding: .45rem .35rem; font-size: .85rem; }
   .card { padding: .9rem; }
   .row.between { flex-direction: column; align-items: stretch; }
   .daynav { justify-content: space-between; }

@@ -1,4 +1,4 @@
-"""Clientes: alta y autocompletado (nombre — dirección)."""
+"""Clientes: agenda y autocompletado (nombre — dirección)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +10,12 @@ from ..models import Cliente
 from ..schemas import ClienteIn, ClienteOut
 
 router = APIRouter(prefix="/api/clientes", tags=["clientes"])
+
+
+@router.get("/agenda", response_model=list[ClienteOut])
+def agenda(db: Session = Depends(get_db)):
+    """Listado completo; la búsqueda de autocompletado sigue limitada a 20."""
+    return db.query(Cliente).order_by(Cliente.nombre, Cliente.direccion, Cliente.id).all()
 
 
 @router.get("", response_model=list[ClienteOut])
@@ -47,3 +53,12 @@ def editar(cliente_id: int, data: ClienteIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cliente)
     return cliente
+
+
+@router.delete("/{cliente_id}", status_code=204)
+def borrar(cliente_id: int, db: Session = Depends(get_db)):
+    cliente = db.get(Cliente, cliente_id)
+    if not cliente:
+        raise HTTPException(404, "Cliente no encontrado")
+    db.delete(cliente)
+    db.commit()
