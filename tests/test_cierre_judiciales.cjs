@@ -31,6 +31,7 @@ function fixture() {
       });
     }
     get innerHTML() { return this.html || ''; }
+    appendChild() {}
   }
   const get = id => {
     if (!elements.has(id)) elements.set(id, new Element(id));
@@ -42,6 +43,10 @@ function fixture() {
     events: {},
     querySelectorAll(selector) { assert.equal(selector, '#jud-items tr'); return get('jud-items').rows; },
     querySelector() { return get('jud-drop'); },
+    createElement(tag) {
+      if (tag === 'canvas') return { getContext() { return { fillRect() {}, drawImage() {} }; } };
+      return new Element(tag);
+    },
   };
   const context = { document, window: {}, console, Math, URL, navigator: { clipboard: { writeText: async () => {} } },
     fetch: async () => ({ ok: true, json: async () => [] }) };
@@ -49,7 +54,7 @@ function fixture() {
   document.events.DOMContentLoaded();
   const row = name => get('jud-items').rows.find(r => r.querySelector('.jud-name').value === name);
   const setQty = (name, value) => { row(name).querySelector('.jud-qty').value = String(value); get('jud-items').fire('input'); };
-  return { get, row, setQty };
+  return { get, row, setQty, context };
 }
 
 test('separates Cobb constraints by pass and preserves manually edited values', () => {
@@ -124,4 +129,37 @@ test('compound dish names stay separate from Brie and Atun', () => {
   get('jud-generate').fire('click');
   assert.equal(get('jud-res-fact-total').textContent, '2');
   assert.equal(get('jud-res-no-total').textContent, '3');
+});
+
+test('OCR on the original sheet fills 27 dishes; a message image preserves the sheet total', async () => {
+  const { get, row, context } = fixture();
+  const texts = [
+    `Caesar 11500 12500 3\nBrie 11500 12500 2\nClasica 11500 12500 4\nAtun 11500 12500 3\nPorto 11500 12500 1\nFalafel 11500 12500 1\nCala 11500 12500 5\nWrap Brie 11500 12500 6\nCobb 12500 13500 2\nJudiciales 27`,
+    'Facturar 16\nNo facturar 11(2cobb)',
+  ];
+  context.window.createImageBitmap = context.createImageBitmap = async () => ({ width: 294, height: 595, close() {} });
+  const modes = [];
+  context.window.Tesseract = context.Tesseract = {
+    PSM: { SINGLE_BLOCK: '6' },
+    async createWorker() { return {
+      async setParameters(params) { modes.push(params.tessedit_pageseg_mode); },
+      async recognize() { return { data: { text: texts.shift() } }; },
+      async terminate() {},
+    }; },
+  };
+  const file = new Blob(['image'], { type: 'image/png' });
+  const input = get('jud-file').events.change;
+  input({ target: { files: [file] } });
+  await new Promise(setImmediate);
+  assert.equal(get('jud-total').textContent, '27');
+  assert.equal(row('Cobb').querySelector('.jud-qty').value, '2');
+  input({ target: { files: [file] } });
+  await new Promise(setImmediate);
+  assert.equal(get('jud-facturar').value, '16');
+  assert.equal(get('jud-no-facturar').value, '11');
+  get('jud-generate').fire('click');
+  assert.match(get('jud-validation').textContent, /Cobb: pedís 0 en Facturar \+ 2 en No facturar, pero sólo hay 2|Total detectado: 27/);
+  assert.equal(get('jud-res-fact-total').textContent, '16');
+  assert.equal(get('jud-res-no-total').textContent, '11');
+  assert.deepEqual(modes, ['6', '6']);
 });
