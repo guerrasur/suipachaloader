@@ -51,16 +51,38 @@ def test_cuenta_semanal_extras_cierre_y_cobro(client):
     })
     assert segundo.status_code == 200
     assert client.get(f"/api/cuentas/{cid}").json()["pendiente"] == 40000
+    assert client.get("/api/cuentas").json()[0]["valor"] == 40000
     cierre = client.post(f"/api/cuentas/{cid}/cierres", json={"hasta": "2026-09-25"})
     assert cierre.status_code == 200, cierre.text
     assert cierre.json()["total"] == 31000
     detalle = client.get(f"/api/cuentas/{cid}").json()
     assert detalle["pendiente"] == 9000
+    assert detalle["por_cobrar"] == 31000
+    assert detalle["saldo"] == 40000  # facturar todavía no es cobrar
+    assert client.get("/api/cuentas").json()[0]["valor"] == 40000
     assert detalle["pedidos"][1]["items"][0]["extra"] == "Huevo"
     assert client.delete(f"/api/cuentas/{cid}/pedidos/{primero.json()['id']}").status_code == 409
     assert client.post(f"/api/cuentas/{cid}/cierres", json={"hasta": "2026-09-25"}).status_code == 409
     assert client.post(f"/api/cuentas/{cid}/cierres/{cierre.json()['id']}/pagado").json()["pagado"]
     assert client.get(f"/api/cuentas/{cid}").json()["cierres"][0]["pagado"]
+    assert client.get(f"/api/cuentas/{cid}").json()["saldo"] == 9000
     assert client.get("/api/pedidos?fecha=2026-09-21").json() == []
     assert client.delete(f"/api/cuentas/{cid}/pedidos/{segundo.json()['id']}").status_code == 204
     assert client.get(f"/api/cuentas/{cid}").json()["pendiente"] == 0
+    assert client.get(f"/api/cuentas/{cid}").json()["saldo"] == 0
+
+
+def test_cobrar_todos_cierres_pendientes(client):
+    _, cid = _cuenta(client, "semanal")
+    for fecha, monto in [("2026-09-21", 5000), ("2026-09-28", 7000)]:
+        assert client.post(f"/api/cuentas/{cid}/pedidos", json={
+            "fecha": fecha, "items": [{"plato": "Menú", "cantidad": 1, "precio_unitario": monto}],
+        }).status_code == 200
+        assert client.post(f"/api/cuentas/{cid}/cierres", json={"hasta": fecha}).status_code == 200
+    assert client.get(f"/api/cuentas/{cid}").json()["saldo"] == 12000
+    pago = client.post(f"/api/cuentas/{cid}/cierres/cobrar-todos")
+    assert pago.status_code == 200
+    assert pago.json() == {"cierres": 2, "total": 12000}
+    assert client.get(f"/api/cuentas/{cid}").json()["saldo"] == 0
+    assert client.get("/api/cuentas").json()[0]["valor"] == 0
+    assert client.post(f"/api/cuentas/{cid}/cierres/cobrar-todos").status_code == 409

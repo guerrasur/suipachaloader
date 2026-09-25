@@ -88,7 +88,8 @@ def listar(db: Session = Depends(get_db)):
             valor = _saldo(movimientos)
         else:
             pedidos = db.query(PedidoCuenta).filter_by(cuenta_id=c.id, cierre_id=None).all()
-            valor = round(sum(p.total for p in pedidos), 2)
+            cierres_sin_cobrar = db.query(CierreCuenta).filter_by(cuenta_id=c.id, pagado=False).all()
+            valor = round(sum(p.total for p in pedidos) + sum(x.total for x in cierres_sin_cobrar), 2)
         resultado.append({"id": c.id, "cliente_id": c.cliente_id, "nombre": c.cliente.nombre,
                           "tipo": c.tipo, "valor": valor})
     return resultado
@@ -120,7 +121,10 @@ def detalle(cuenta_id: int, db: Session = Depends(get_db)):
         pedidos = (db.query(PedidoCuenta).options(selectinload(PedidoCuenta.items))
                    .filter_by(cuenta_id=c.id).order_by(PedidoCuenta.fecha.desc(), PedidoCuenta.id.desc()).all())
         cierres = db.query(CierreCuenta).filter_by(cuenta_id=c.id).order_by(CierreCuenta.id.desc()).all()
-        base.update(pendiente=round(sum(p.total for p in pedidos if p.cierre_id is None), 2),
+        pendiente = round(sum(p.total for p in pedidos if p.cierre_id is None), 2)
+        por_cobrar = round(sum(x.total for x in cierres if not x.pagado), 2)
+        base.update(pendiente=pendiente, por_cobrar=por_cobrar,
+                    saldo=round(pendiente + por_cobrar, 2),
                     pedidos=[_pedido_out(p) for p in pedidos],
                     cierres=[{"id": cierre.id, "fecha": cierre.fecha, "total": cierre.total,
                               "pagado": cierre.pagado} for cierre in cierres])
@@ -213,3 +217,16 @@ def marcar_pagado(cuenta_id: int, cierre_id: int, db: Session = Depends(get_db))
     cierre.pagado = True
     db.commit()
     return {"id": cierre.id, "pagado": True}
+
+
+@router.post("/{cuenta_id}/cierres/cobrar-todos")
+def cobrar_todos(cuenta_id: int, db: Session = Depends(get_db)):
+    """Marca cobrados los cierres; los pedidos aún sin facturar siguen pendientes."""
+    _cuenta(db, cuenta_id, "semanal")
+    cierres = db.query(CierreCuenta).filter_by(cuenta_id=cuenta_id, pagado=False).all()
+    if not cierres:
+        raise HTTPException(409, "No hay cierres pendientes de cobro")
+    for cierre in cierres:
+        cierre.pagado = True
+    db.commit()
+    return {"cierres": len(cierres), "total": round(sum(c.total for c in cierres), 2)}

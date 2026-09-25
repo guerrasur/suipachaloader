@@ -202,8 +202,9 @@ let cuentaActual = null;
 
 async function loadCuentas() {
   try {
-    const [cuentas, clientes] = await Promise.all([api("/api/cuentas"), api("/api/clientes/agenda")]);
+    const [cuentas, clientes, platos] = await Promise.all([api("/api/cuentas"), api("/api/clientes/agenda"), api("/api/platos")]);
     cuentasClientes = cuentas;
+    state.platos = platos;
     $("cuenta-cliente").innerHTML = `<option value="">Elegí un cliente</option>` + clientes
       .filter((c) => !cuentas.some((cu) => cu.cliente_id === c.id))
       .map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} — ${escapeHtml(c.direccion)}</option>`).join("");
@@ -211,7 +212,7 @@ async function loadCuentas() {
       <button type="button" class="cuenta-card ${cuentaActual?.id === c.id ? "active" : ""}" data-id="${c.id}">
         <span class="cuenta-card-name">${escapeHtml(c.nombre)}</span>
         <small>${c.tipo === "platos" ? "Platos prepagados" : "Facturación semanal"}</small>
-        <strong>${c.tipo === "platos" ? `${c.valor} ${c.valor === 1 ? "plato disponible" : "platos disponibles"}` : `${money(c.valor)} pendiente`}</strong>
+        <strong>${c.tipo === "platos" ? `${c.valor} ${c.valor === 1 ? "plato disponible" : "platos disponibles"}` : `${money(c.valor)} por saldar`}</strong>
       </button>`).join("") : `<p class="muted">Todavía no hay cuentas. Abrí una para un cliente de la agenda.</p>`;
     if (cuentaActual) await seleccionarCuenta(cuentaActual.id);
   } catch (err) { toast("No se pudieron cargar las cuentas: " + err.message, "error"); }
@@ -275,7 +276,8 @@ function renderCuentaDetalle() {
   }
   const pendientes = c.pedidos.filter((p) => p.cierre_id === null);
   $("cuenta-detalle").innerHTML = `${titulo}
-    <div class="cuenta-saldo"><strong>${money(c.pendiente)}</strong><span>pendiente de facturar</span></div>
+    <div class="cuenta-saldo"><strong>${money(c.saldo)}</strong><span>saldo por saldar</span></div>
+    <p class="muted">Sin facturar: ${money(c.pendiente)} · Facturado sin cobrar: ${money(c.por_cobrar)}</p>
     <p class="muted">Registrá acá cada pedido de la empresa. Estos importes no entran en la caja diaria. Si necesita ticket o ruta, cargalo también en Pedidos.</p>
     <form id="cuenta-pedido-form" class="panel">
       <div class="row"><div class="field"><label for="cp-fecha">Fecha del pedido</label><input type="date" id="cp-fecha" value="${todayISO()}" required /></div>
@@ -285,7 +287,7 @@ function renderCuentaDetalle() {
     </form>
     <div class="row between" style="margin:1.1rem 0 .5rem;"><h3>Pedidos pendientes</h3><div class="row"><div class="field"><label for="cc-hasta">Incluir hasta</label><input id="cc-hasta" type="date" value="${todayISO()}" /></div><button type="button" class="btn secondary sm" id="cc-cerrar" ${pendientes.length ? "" : "disabled"}>Marcar facturado</button></div></div>
     ${renderPedidosCuenta(pendientes, true)}
-    <h3 style="margin-top:1.3rem;">Cierres anteriores</h3>
+    <div class="row between" style="margin-top:1.3rem;"><h3>Cierres anteriores</h3>${c.por_cobrar ? `<button type="button" class="btn secondary sm" id="cc-cobrar-todos">Marcar todos los cierres cobrados</button>` : ""}</div>
     ${c.cierres.length ? c.cierres.map((cc) => `<details class="cuenta-cierre"><summary>${cc.fecha} · ${money(cc.total)} · ${cc.pagado ? "Pagado" : "Pendiente de cobro"}</summary>
       <div class="row" style="margin:.65rem 0;"><button type="button" class="btn ghost sm" data-copiar="${cc.id}">Copiar resumen</button>${cc.pagado ? "" : `<button type="button" class="btn secondary sm" data-pagar="${cc.id}">Marcar cobrado</button>`}</div>
       ${renderPedidosCuenta(c.pedidos.filter((p) => p.cierre_id === cc.id), false)}</details>`).join("") : `<p class="muted">Aún no hay cierres.</p>`}`;
@@ -301,7 +303,7 @@ function agregarLineaCuenta() {
   $("cp-items").insertAdjacentHTML("beforeend", `<div class="cuenta-linea row">
     <div class="field grow"><label>Plato</label><input class="cp-plato" list="cuenta-platos" required placeholder="Nombre del plato" /></div>
     <div class="field"><label>Cantidad</label><input class="cp-cantidad" type="number" min="1" step="1" value="1" required /></div>
-    <div class="field"><label>Precio c/u</label><input class="cp-precio" type="number" min="0" step="any" required placeholder="$" /></div>
+    <div class="field"><label>Precio lista c/u (editable)</label><input class="cp-precio" type="number" min="0" step="any" required placeholder="$" /></div>
     <div class="field grow"><label>Agregado</label><input class="cp-extra" placeholder="Opcional" /></div>
     <div class="field"><label>$ extra c/u</label><input class="cp-extra-precio" type="number" min="0" step="any" value="0" required /></div>
     <button type="button" class="btn ghost sm cp-remove" title="Quitar plato">✕</button></div>`);
@@ -313,6 +315,22 @@ $("cuenta-detalle").addEventListener("change", (e) => {
   const retiro = e.target.value === "retiro";
   $("cm-plato-wrap").classList.toggle("hidden", !retiro);
   $("cm-plato").required = retiro;
+});
+$("cuenta-detalle").addEventListener("input", (e) => {
+  if (!e.target.classList.contains("cp-plato")) return;
+  const input = e.target;
+  const linea = input.closest(".cuenta-linea");
+  const precio = linea.querySelector(".cp-precio");
+  const nombre = input.value.trim().toLocaleLowerCase("es-AR");
+  if (nombre === input.dataset.platoAsignado) return; // un precio editado a mano se conserva
+  const plato = state.platos.find((p) => p.activo && p.nombre.trim().toLocaleLowerCase("es-AR") === nombre);
+  if (plato) {
+    precio.value = plato.precio_lista; // facturación diferida: precio de lista
+    input.dataset.platoAsignado = nombre;
+  } else {
+    if (input.dataset.platoAsignado) precio.value = "";
+    input.dataset.platoAsignado = "";
+  }
 });
 $("cuenta-detalle").addEventListener("click", async (e) => {
   const el = e.target.closest("button");
@@ -337,6 +355,9 @@ $("cuenta-detalle").addEventListener("click", async (e) => {
     } else if (el.dataset.pagar) {
       if (!confirm("¿Confirmás que recibiste el pago de este cierre?")) return;
       await api(`/api/cuentas/${id}/cierres/${el.dataset.pagar}/pagado`, { method: "POST" });
+    } else if (el.id === "cc-cobrar-todos") {
+      if (!confirm(`¿Confirmás que cobraste todos los cierres pendientes (${money(cuentaActual.por_cobrar)})? Los pedidos aún sin facturar seguirán pendientes.`)) return;
+      await api(`/api/cuentas/${id}/cierres/cobrar-todos`, { method: "POST" });
     } else if (el.dataset.copiar) {
       const cierre = cuentaActual.cierres.find((c) => c.id === +el.dataset.copiar);
       const pedidos = cuentaActual.pedidos.filter((p) => p.cierre_id === cierre.id);
