@@ -158,6 +158,91 @@
     renderItems();
   }
 
+  function parseOcrText(text) {
+    const rawLines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    let hits = 0;
+    for (const line of rawLines) {
+      const key = canonical(line);
+      if (!key) continue;
+      const nums = line.match(/\d+/g);
+      if (!nums?.length) continue;
+      let qty = parseInt(nums[nums.length-1],10);
+      if (qty > 200) continue;
+      let item = items.find(i => canonical(i.nombre) === key);
+      if (!item) {
+        item = { nombre:displayName(key), cantidad:0, facturarFijo:0, noFacturarFijo:0 };
+        items.push(item);
+      }
+      item.cantidad = qty;
+      item.facturarFijo = Math.min(item.facturarFijo || 0, qty);
+      item.noFacturarFijo = Math.min(item.noFacturarFijo || 0, qty);
+      hits++;
+    }
+    renderItems();
+    return hits;
+  }
+
+  async function ocrImage(file) {
+    if (!window.Tesseract) throw new Error("No se pudo cargar el motor OCR. Revisá la conexión a internet.");
+    setStatus("Leyendo captura… La primera vez puede tardar unos segundos.", true);
+    const result = await Tesseract.recognize(file, "eng", {
+      logger: (m) => {
+        if (m.status === "recognizing text") setStatus(`Leyendo captura… ${Math.round((m.progress||0)*100)}%`, true);
+      }
+    });
+    const text = result?.data?.text || "";
+    const hits = parseOcrText(text);
+    const cierre = extractClosingLine(text);
+    if (cierre) {
+      byId("jud-message").value = cierre;
+      parseMessage(cierre);
+    }
+    setStatus(hits ? `OCR listo: ${hits} platos detectados. Revisá las cantidades antes de generar.` : "OCR listo. No pude reconocer filas de platos; podés corregirlas manualmente.", false);
+  }
+
+  function extractClosingLine(text) {
+    return text.split(/\r?\n/).filter(l => /facturar/i.test(l)).join(" / ");
+  }
+
+  async function handleFiles(files) {
+    if (ocrBusy) return;
+    const imgs = [...files].filter(f => f.type.startsWith("image/"));
+    if (!imgs.length) return;
+    ocrBusy = true;
+    try {
+      for (const file of imgs) {
+        addPreview(file);
+        await ocrImage(file);
+      }
+    } catch (err) {
+      setStatus(err.message || "No se pudo leer la captura.", false, true);
+    } finally { ocrBusy = false; }
+  }
+
+  function addPreview(file) {
+    const img = document.createElement("img");
+    img.className = "jud-preview";
+    img.alt = "Captura cargada";
+    img.src = URL.createObjectURL(file);
+    img.onload = () => URL.revokeObjectURL(img.src);
+    byId("jud-previews").appendChild(img);
+  }
+
+  function setStatus(msg, visible=true, error=false) {
+    const el = byId("jud-ocr-status");
+    el.textContent = msg;
+    el.classList.toggle("hidden", !visible && !msg);
+    el.classList.toggle("warn", !!error);
+    el.classList.toggle("info", !error);
+  }
+
+  function shuffle(a) {
+    for (let i=a.length-1;i>0;i--) {
+      const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
   function generateSplit() {
     syncItemsFromTable();
     // Parsear una vez antes de generar, sin tocar las cantidades pedidas.
