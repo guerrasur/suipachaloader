@@ -19,7 +19,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app.main as main_mod  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
-from app.models import Cliente, GeocodeCache, Pedido, PedidoItem, PlatoDia, PlatoDiaItem, RepartidorDia  # noqa: E402
+from app.models import (Cliente, GeocodeCache, Pedido, PedidoItem, PlatoDia, PlatoDiaItem,
+                        RepartidorDia, CuentaCliente, MovimientoPlatos, PedidoCuenta,
+                        ItemCuenta, CierreCuenta)  # noqa: E402
 
 # El startup real respalda la BD de producción y lanza el hilo de backups
 # periódicos: en tests se anulan.
@@ -41,6 +43,11 @@ def db_limpia():
     yield
     db = SessionLocal()
     try:
+        db.query(ItemCuenta).delete()
+        db.query(PedidoCuenta).delete()
+        db.query(CierreCuenta).delete()
+        db.query(MovimientoPlatos).delete()
+        db.query(CuentaCliente).delete()
         db.query(PedidoItem).delete()
         db.query(Pedido).delete()
         db.query(Cliente).delete()

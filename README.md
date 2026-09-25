@@ -90,6 +90,14 @@ automáticamente. Al arrancar:
   retirar por el local (se marcan con el botón "Reservado", no con "Salió").
 - **Anulación** de pedidos (nunca se borran; no suman ni alertan).
 - **Resumen de caja** del día por método de pago.
+- **Cuentas de clientes:** desde la pestaña Cuentas se pueden abrir cuentas de
+  platos prepagados (cargar cantidad pagada en Bistro, anotar qué plato retira
+  cada día y ver cuántos quedan) o de facturación semanal (registrar pedidos
+  con varios platos, agregados y precios; cerrar los pendientes hasta una fecha,
+  copiar el resumen y marcar el cierre cobrado). Las cuentas son registros
+  operativos independientes: no crean pedidos en la tabla del día, tickets,
+  rutas, entradas de caja ni facturas en Bistro. Para una entrega que también
+  necesite ticket o ruta, hay que cargarla como pedido del día por separado.
 - **Facturación de fin del día:** menú con la cantidad vendida de cada ítem
   (platos, ensaladas, bebidas) **más los envíos**, en una columna por método
   de pago (efectivo, transferencia, y QR / Posnet si se usaron). Así se

@@ -90,6 +90,7 @@ function switchTab(tab) {
   $("view-" + tab).classList.add("active");
   if (tab === "carta") loadCarta();
   if (tab === "clientes") loadClientes();
+  if (tab === "cuentas") return loadCuentas();
   if (tab === "config") loadConfig();
 }
 
@@ -123,7 +124,7 @@ function renderClientes() {
       <td>${escapeHtml(c.telefono) || "—"}</td>
       <td>${escapeHtml(c.indicaciones) || "—"}</td>
       <td>${c.descuento_tipo ? `${c.descuento_tipo === "porcentaje" ? `${c.descuento_valor}%` : money(c.descuento_valor)}` : "—"}</td>
-      <td class="clientes-actions"><button type="button" class="btn secondary sm" data-action="edit">Editar</button> <button type="button" class="btn ghost sm" data-action="delete">Borrar</button></td>
+      <td class="clientes-actions"><button type="button" class="btn secondary sm" data-action="account">Cuenta</button> <button type="button" class="btn secondary sm" data-action="edit">Editar</button> <button type="button" class="btn ghost sm" data-action="delete">Borrar</button></td>
     </tr>`).join("") : `<tr><td colspan="6" class="muted">${termino ? "No hay clientes que coincidan." : "Todavía no hay clientes guardados."}</td></tr>`;
 }
 
@@ -133,6 +134,16 @@ $("clientes-body").addEventListener("click", async (e) => {
   if (!boton) return;
   const c = agendaClientes.find((item) => item.id === Number(boton.closest("tr").dataset.id));
   if (!c) return;
+  if (boton.dataset.action === "account") {
+    await switchTab("cuentas");
+    const cuenta = cuentasClientes.find((item) => item.cliente_id === c.id);
+    if (cuenta) seleccionarCuenta(cuenta.id);
+    else {
+      $("cuenta-nueva").classList.remove("hidden");
+      $("cuenta-cliente").value = c.id;
+    }
+    return;
+  }
   if (boton.dataset.action === "edit") {
     clienteEditId = c.id;
     $("mc-nombre").value = c.nombre;
@@ -183,6 +194,189 @@ $("cliente-form").addEventListener("submit", async (e) => {
   } finally {
     boton.disabled = false;
   }
+});
+
+// ------------------------------------------------------- cuentas de clientes
+let cuentasClientes = [];
+let cuentaActual = null;
+
+async function loadCuentas() {
+  try {
+    const [cuentas, clientes] = await Promise.all([api("/api/cuentas"), api("/api/clientes/agenda")]);
+    cuentasClientes = cuentas;
+    $("cuenta-cliente").innerHTML = `<option value="">Elegí un cliente</option>` + clientes
+      .filter((c) => !cuentas.some((cu) => cu.cliente_id === c.id))
+      .map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} — ${escapeHtml(c.direccion)}</option>`).join("");
+    $("cuentas-list").innerHTML = cuentas.length ? cuentas.map((c) => `
+      <button type="button" class="cuenta-card ${cuentaActual?.id === c.id ? "active" : ""}" data-id="${c.id}">
+        <span class="cuenta-card-name">${escapeHtml(c.nombre)}</span>
+        <small>${c.tipo === "platos" ? "Platos prepagados" : "Facturación semanal"}</small>
+        <strong>${c.tipo === "platos" ? `${c.valor} ${c.valor === 1 ? "plato disponible" : "platos disponibles"}` : `${money(c.valor)} pendiente`}</strong>
+      </button>`).join("") : `<p class="muted">Todavía no hay cuentas. Abrí una para un cliente de la agenda.</p>`;
+    if (cuentaActual) await seleccionarCuenta(cuentaActual.id);
+  } catch (err) { toast("No se pudieron cargar las cuentas: " + err.message, "error"); }
+}
+
+$("cuenta-nueva-toggle").addEventListener("click", () => $("cuenta-nueva").classList.toggle("hidden"));
+$("cuenta-nueva").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const boton = e.target.querySelector('button[type="submit"]');
+  boton.disabled = true;
+  try {
+    const result = await api("/api/cuentas", { method: "POST", body: JSON.stringify({
+      cliente_id: +$("cuenta-cliente").value, tipo: $("cuenta-tipo").value,
+    }) });
+    $("cuenta-nueva").classList.add("hidden");
+    cuentaActual = null;
+    await loadCuentas();
+    await seleccionarCuenta(result.id);
+    toast("Cuenta creada", "ok");
+  } catch (err) { toast("No se pudo crear la cuenta: " + err.message, "error"); }
+  finally { boton.disabled = false; }
+});
+$("cuentas-list").addEventListener("click", (e) => {
+  const card = e.target.closest("button[data-id]");
+  if (card) seleccionarCuenta(+card.dataset.id);
+});
+
+async function seleccionarCuenta(id) {
+  try {
+    cuentaActual = await api(`/api/cuentas/${id}`);
+    $("cuenta-detalle").classList.remove("hidden");
+    document.querySelectorAll(".cuenta-card").forEach((card) => card.classList.toggle("active", +card.dataset.id === id));
+    renderCuentaDetalle();
+  } catch (err) { toast("No se pudo abrir la cuenta: " + err.message, "error"); }
+}
+
+function renderCuentaDetalle() {
+  const c = cuentaActual;
+  if (!c) return;
+  const titulo = `<h2>${escapeHtml(c.nombre)}</h2>`;
+  if (c.tipo === "platos") {
+    $("cuenta-detalle").innerHTML = `${titulo}
+      <div class="cuenta-saldo"><strong>${c.saldo}</strong><span>${c.saldo === 1 ? "plato disponible" : "platos disponibles"}</span></div>
+      <p class="muted">El pago se registra en Bistro. Cada retiro descuenta platos acá, sin generar otro cobro.</p>
+      <form id="cuenta-mov-form" class="panel">
+        <div class="row">
+          <div class="field"><label for="cm-tipo">Movimiento</label><select id="cm-tipo"><option value="retiro">Retiró platos</option><option value="carga">Pagó platos en Bistro</option></select></div>
+          <div class="field"><label for="cm-cantidad">Cantidad</label><input id="cm-cantidad" type="number" min="1" step="1" value="1" required /></div>
+          <div class="field"><label for="cm-fecha">Fecha</label><input id="cm-fecha" type="date" value="${todayISO()}" required /></div>
+          <div class="field grow" id="cm-plato-wrap"><label for="cm-plato">Qué plato llevó</label><input id="cm-plato" list="cuenta-platos" placeholder="Plato elegido" required /></div>
+          <datalist id="cuenta-platos">${state.platos.filter((p) => p.activo).map((p) => `<option value="${escapeAttr(p.nombre)}"></option>`).join("")}</datalist>
+        </div>
+        <div class="row" style="margin-top:.6rem;"><div class="field grow"><label for="cm-nota">Nota (opcional)</label><input id="cm-nota" placeholder="Ej.: pago anotado en Bistro, agregado cobrado aparte…" /></div>
+          <button type="submit" class="btn">Registrar</button></div>
+      </form>
+      <h3 style="margin-top:1.2rem;">Historial</h3>
+      <div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Movimiento</th><th>Plato / nota</th><th></th></tr></thead><tbody>
+        ${c.movimientos.length ? c.movimientos.map((m) => `<tr><td>${m.fecha}</td><td>${m.tipo === "carga" ? `+${m.cantidad} pagados` : `−${m.cantidad} retirados`}</td><td>${escapeHtml(m.plato) || "—"}${m.nota ? `<br><small class="muted">${escapeHtml(m.nota)}</small>` : ""}</td><td><button type="button" class="btn ghost sm" data-mov-delete="${m.id}" aria-label="Borrar movimiento">Borrar</button></td></tr>`).join("") : `<tr><td colspan="4" class="muted">Todavía no hay movimientos.</td></tr>`}
+      </tbody></table></div>`;
+    return;
+  }
+  const pendientes = c.pedidos.filter((p) => p.cierre_id === null);
+  $("cuenta-detalle").innerHTML = `${titulo}
+    <div class="cuenta-saldo"><strong>${money(c.pendiente)}</strong><span>pendiente de facturar</span></div>
+    <p class="muted">Registrá acá cada pedido de la empresa. Estos importes no entran en la caja diaria. Si necesita ticket o ruta, cargalo también en Pedidos.</p>
+    <form id="cuenta-pedido-form" class="panel">
+      <div class="row"><div class="field"><label for="cp-fecha">Fecha del pedido</label><input type="date" id="cp-fecha" value="${todayISO()}" required /></div>
+        <div class="field grow"><label for="cp-nota">Nota (opcional)</label><input id="cp-nota" placeholder="Entrega, contacto…" /></div></div>
+      <div id="cp-items"></div>
+      <div class="row" style="margin-top:.7rem;"><button type="button" class="btn secondary sm" id="cp-add">+ Plato</button><button type="submit" class="btn">Agregar pedido a la cuenta</button></div>
+    </form>
+    <div class="row between" style="margin:1.1rem 0 .5rem;"><h3>Pedidos pendientes</h3><div class="row"><div class="field"><label for="cc-hasta">Incluir hasta</label><input id="cc-hasta" type="date" value="${todayISO()}" /></div><button type="button" class="btn secondary sm" id="cc-cerrar" ${pendientes.length ? "" : "disabled"}>Marcar facturado</button></div></div>
+    ${renderPedidosCuenta(pendientes, true)}
+    <h3 style="margin-top:1.3rem;">Cierres anteriores</h3>
+    ${c.cierres.length ? c.cierres.map((cc) => `<details class="cuenta-cierre"><summary>${cc.fecha} · ${money(cc.total)} · ${cc.pagado ? "Pagado" : "Pendiente de cobro"}</summary>
+      <div class="row" style="margin:.65rem 0;"><button type="button" class="btn ghost sm" data-copiar="${cc.id}">Copiar resumen</button>${cc.pagado ? "" : `<button type="button" class="btn secondary sm" data-pagar="${cc.id}">Marcar cobrado</button>`}</div>
+      ${renderPedidosCuenta(c.pedidos.filter((p) => p.cierre_id === cc.id), false)}</details>`).join("") : `<p class="muted">Aún no hay cierres.</p>`}`;
+  agregarLineaCuenta();
+}
+
+function renderPedidosCuenta(pedidos, editable) {
+  return pedidos.length ? `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Platos y agregados</th><th>Total</th><th></th></tr></thead><tbody>${pedidos.map((p) => `
+    <tr><td>${p.fecha}</td><td>${p.items.map((i) => `${i.cantidad} × ${escapeHtml(i.plato)}${i.extra ? ` + ${escapeHtml(i.extra)}` : ""}`).join("<br>")}${p.nota ? `<br><small class="muted">${escapeHtml(p.nota)}</small>` : ""}</td><td>${money(p.total)}</td><td>${editable ? `<button type="button" class="btn ghost sm" data-pedido-delete="${p.id}">Borrar</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No hay pedidos pendientes.</p>`;
+}
+
+function agregarLineaCuenta() {
+  $("cp-items").insertAdjacentHTML("beforeend", `<div class="cuenta-linea row">
+    <div class="field grow"><label>Plato</label><input class="cp-plato" list="cuenta-platos" required placeholder="Nombre del plato" /></div>
+    <div class="field"><label>Cantidad</label><input class="cp-cantidad" type="number" min="1" step="1" value="1" required /></div>
+    <div class="field"><label>Precio c/u</label><input class="cp-precio" type="number" min="0" step="any" required placeholder="$" /></div>
+    <div class="field grow"><label>Agregado</label><input class="cp-extra" placeholder="Opcional" /></div>
+    <div class="field"><label>$ extra c/u</label><input class="cp-extra-precio" type="number" min="0" step="any" value="0" required /></div>
+    <button type="button" class="btn ghost sm cp-remove" title="Quitar plato">✕</button></div>`);
+  if (!$('cuenta-platos')) $("cp-items").insertAdjacentHTML("beforeend", `<datalist id="cuenta-platos">${state.platos.filter((p) => p.activo).map((p) => `<option value="${escapeAttr(p.nombre)}"></option>`).join("")}</datalist>`);
+}
+
+$("cuenta-detalle").addEventListener("change", (e) => {
+  if (e.target.id !== "cm-tipo") return;
+  const retiro = e.target.value === "retiro";
+  $("cm-plato-wrap").classList.toggle("hidden", !retiro);
+  $("cm-plato").required = retiro;
+});
+$("cuenta-detalle").addEventListener("click", async (e) => {
+  const el = e.target.closest("button");
+  if (!el || !cuentaActual) return;
+  if (el.id === "cp-add") { agregarLineaCuenta(); return; }
+  if (el.classList.contains("cp-remove")) {
+    if (document.querySelectorAll(".cuenta-linea").length > 1) el.closest(".cuenta-linea").remove();
+    return;
+  }
+  const id = cuentaActual.id;
+  try {
+    if (el.dataset.movDelete) {
+      if (!confirm("¿Borrar este movimiento de platos? Se recalculará el saldo.")) return;
+      await api(`/api/cuentas/${id}/movimientos/${el.dataset.movDelete}`, { method: "DELETE" });
+    } else if (el.dataset.pedidoDelete) {
+      if (!confirm("¿Borrar este pedido pendiente de la cuenta?")) return;
+      await api(`/api/cuentas/${id}/pedidos/${el.dataset.pedidoDelete}`, { method: "DELETE" });
+    } else if (el.id === "cc-cerrar") {
+      const hasta = $("cc-hasta").value;
+      if (!confirm(`¿Marcar facturados todos los pedidos pendientes hasta ${hasta}? Confirmá después de registrarlos en Bistro.`)) return;
+      await api(`/api/cuentas/${id}/cierres`, { method: "POST", body: JSON.stringify({ hasta }) });
+    } else if (el.dataset.pagar) {
+      if (!confirm("¿Confirmás que recibiste el pago de este cierre?")) return;
+      await api(`/api/cuentas/${id}/cierres/${el.dataset.pagar}/pagado`, { method: "POST" });
+    } else if (el.dataset.copiar) {
+      const cierre = cuentaActual.cierres.find((c) => c.id === +el.dataset.copiar);
+      const pedidos = cuentaActual.pedidos.filter((p) => p.cierre_id === cierre.id);
+      const texto = [`${cuentaActual.nombre} — cierre ${cierre.fecha}`, ...pedidos.flatMap((p) => [p.fecha, ...p.items.map((i) => `  ${i.cantidad} × ${i.plato}${i.extra ? ` + ${i.extra}` : ""}: ${money(i.cantidad * (i.precio_unitario + i.precio_extra))}`), `  Subtotal: ${money(p.total)}`]), `TOTAL: ${money(cierre.total)}`].join("\n");
+      await navigator.clipboard.writeText(texto);
+      toast("Resumen copiado", "ok");
+      return;
+    } else return;
+    await loadCuentas();
+    toast("Cuenta actualizada", "ok");
+  } catch (err) { toast("No se pudo actualizar la cuenta: " + err.message, "error"); }
+});
+$("cuenta-detalle").addEventListener("submit", async (e) => {
+  if (!cuentaActual) return;
+  e.preventDefault();
+  const boton = e.target.querySelector('button[type="submit"]');
+  boton.disabled = true;
+  try {
+    if (e.target.id === "cuenta-mov-form") {
+      await api(`/api/cuentas/${cuentaActual.id}/movimientos`, { method: "POST", body: JSON.stringify({
+        tipo: $("cm-tipo").value, cantidad: +$("cm-cantidad").value, fecha: $("cm-fecha").value,
+        plato: $("cm-tipo").value === "retiro" ? $("cm-plato").value.trim() : "",
+        nota: $("cm-nota").value.trim(),
+      }) });
+    } else {
+      const items = [...document.querySelectorAll(".cuenta-linea")].map((linea) => ({
+        plato: linea.querySelector(".cp-plato").value.trim(),
+        cantidad: +linea.querySelector(".cp-cantidad").value,
+        precio_unitario: +linea.querySelector(".cp-precio").value,
+        extra: linea.querySelector(".cp-extra").value.trim(),
+        precio_extra: +linea.querySelector(".cp-extra-precio").value,
+      }));
+      await api(`/api/cuentas/${cuentaActual.id}/pedidos`, { method: "POST", body: JSON.stringify({
+        fecha: $("cp-fecha").value, nota: $("cp-nota").value, items,
+      }) });
+    }
+    await loadCuentas();
+    toast("Registrado en la cuenta", "ok");
+  } catch (err) { toast("No se pudo registrar: " + err.message, "error"); }
+  finally { boton.disabled = false; }
 });
 
 // ------------------------------------------------------------ catalog cache

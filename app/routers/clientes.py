@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Cliente
+from ..models import Cliente, CuentaCliente
 from ..schemas import ClienteIn, ClienteOut
 
 router = APIRouter(prefix="/api/clientes", tags=["clientes"])
@@ -60,5 +60,7 @@ def borrar(cliente_id: int, db: Session = Depends(get_db)):
     cliente = db.get(Cliente, cliente_id)
     if not cliente:
         raise HTTPException(404, "Cliente no encontrado")
+    if db.query(CuentaCliente).filter_by(cliente_id=cliente_id).first():
+        raise HTTPException(409, "El cliente tiene una cuenta. Conservá su historial.")
     db.delete(cliente)
     db.commit()
