@@ -89,8 +89,101 @@ function switchTab(tab) {
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
   $("view-" + tab).classList.add("active");
   if (tab === "carta") loadCarta();
+  if (tab === "clientes") loadClientes();
   if (tab === "config") loadConfig();
 }
+
+// ---------------------------------------------------------- agenda clientes
+let agendaClientes = [];
+let clienteEditId = null;
+
+async function loadClientes() {
+  try {
+    agendaClientes = await api("/api/clientes/agenda");
+    renderClientes();
+  } catch (err) {
+    toast("No se pudo cargar la agenda: " + err.message, "error");
+  }
+}
+
+function renderClientes() {
+  const termino = $("clientes-buscar").value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const visibles = agendaClientes.filter((c) =>
+    [c.nombre, c.direccion, c.telefono].some((v) =>
+      (v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(termino)
+    )
+  );
+  $("clientes-count").textContent = termino
+    ? `${visibles.length} de ${agendaClientes.length} clientes`
+    : `${agendaClientes.length} ${agendaClientes.length === 1 ? "cliente guardado" : "clientes guardados"}`;
+  $("clientes-body").innerHTML = visibles.length ? visibles.map((c) => `
+    <tr data-id="${c.id}">
+      <td><strong>${escapeHtml(c.nombre)}</strong></td>
+      <td>${escapeHtml(c.direccion) || "—"}</td>
+      <td>${escapeHtml(c.telefono) || "—"}</td>
+      <td>${escapeHtml(c.indicaciones) || "—"}</td>
+      <td>${c.descuento_tipo ? `${c.descuento_tipo === "porcentaje" ? `${c.descuento_valor}%` : money(c.descuento_valor)}` : "—"}</td>
+      <td class="clientes-actions"><button type="button" class="btn secondary sm" data-action="edit">Editar</button> <button type="button" class="btn ghost sm" data-action="delete">Borrar</button></td>
+    </tr>`).join("") : `<tr><td colspan="6" class="muted">${termino ? "No hay clientes que coincidan." : "Todavía no hay clientes guardados."}</td></tr>`;
+}
+
+$("clientes-buscar").addEventListener("input", renderClientes);
+$("clientes-body").addEventListener("click", async (e) => {
+  const boton = e.target.closest("button[data-action]");
+  if (!boton) return;
+  const c = agendaClientes.find((item) => item.id === Number(boton.closest("tr").dataset.id));
+  if (!c) return;
+  if (boton.dataset.action === "edit") {
+    clienteEditId = c.id;
+    $("mc-nombre").value = c.nombre;
+    $("mc-direccion").value = c.direccion || "";
+    $("mc-telefono").value = c.telefono || "";
+    $("mc-indicaciones").value = c.indicaciones || "";
+    $("mc-desc-tipo").value = c.descuento_tipo || "";
+    $("mc-desc-valor").value = c.descuento_valor || 0;
+    $("modal-cliente").classList.add("show");
+    $("mc-nombre").focus();
+    return;
+  }
+  if (!confirm(`¿Borrar a ${c.nombre} de la agenda? Los pedidos anteriores se conservan.`)) return;
+  boton.disabled = true;
+  try {
+    await api(`/api/clientes/${c.id}`, { method: "DELETE" });
+    await loadClientes();
+    toast("Cliente borrado de la agenda", "ok");
+  } catch (err) {
+    boton.disabled = false;
+    toast("No se pudo borrar: " + err.message, "error");
+  }
+});
+
+$("mc-cancel").addEventListener("click", () => {
+  $("modal-cliente").classList.remove("show");
+  clienteEditId = null;
+});
+$("cliente-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (clienteEditId === null) return;
+  const boton = $("mc-save");
+  boton.disabled = true;
+  try {
+    await api(`/api/clientes/${clienteEditId}`, { method: "PUT", body: JSON.stringify({
+      nombre: $("mc-nombre").value.trim(),
+      direccion: $("mc-direccion").value.trim(),
+      telefono: $("mc-telefono").value.trim(),
+      indicaciones: $("mc-indicaciones").value.trim(),
+      descuento_tipo: $("mc-desc-tipo").value || null,
+      descuento_valor: +$("mc-desc-valor").value || 0,
+    }) });
+    $("mc-cancel").click();
+    await loadClientes();
+    toast("Cliente actualizado", "ok");
+  } catch (err) {
+    toast("No se pudo guardar: " + err.message, "error");
+  } finally {
+    boton.disabled = false;
+  }
+});
 
 // ------------------------------------------------------------ catalog cache
 async function loadCatalog() {
@@ -2378,6 +2471,7 @@ const MODAL_CERRAR = {
   "modal-ticket": "ticket-cerrar",
   "modal-rutas": "rutas-cerrar",
   "modal-plato": "mp-cancel",
+  "modal-cliente": "mc-cancel",
 };
 // Sólo los modales sin campos editables cierran con click afuera (un click
 // accidental no puede hacer perder lo tipeado en los de formulario).

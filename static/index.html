@@ -13,6 +13,7 @@
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Pedidos</button>
       <button data-tab="carta">Carta</button>
+      <button data-tab="clientes">Clientes</button>
       <button data-tab="config">Configuración</button>
     </nav>
   </header>
@@ -247,6 +248,28 @@
       </div>
     </section>
 
+    <!-- ============ CLIENTES ============ -->
+    <section id="view-clientes" class="view">
+      <div class="card">
+        <div class="row between clientes-heading">
+          <div>
+            <h2>Clientes</h2>
+            <p class="muted" id="clientes-count" aria-live="polite"></p>
+          </div>
+          <div class="field clientes-search">
+            <label for="clientes-buscar">Buscar por nombre, dirección o teléfono</label>
+            <input id="clientes-buscar" type="search" placeholder="Buscar cliente…" autocomplete="off" />
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Indicaciones</th><th>Descuento</th><th>Acciones</th></tr></thead>
+            <tbody id="clientes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ CONFIG ============ -->
     <section id="view-config" class="view">
       <div class="card" style="max-width:520px;">
@@ -406,6 +429,27 @@
       <div class="row" style="justify-content:flex-end;margin-top:1rem;">
         <button class="btn ghost" id="ticket-rep-cancel">Cancelar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Edición de cliente -->
+  <div class="modal-back" id="modal-cliente">
+    <div class="modal">
+      <h2>Editar cliente</h2>
+      <form id="cliente-form">
+        <div class="field"><label for="mc-nombre">Nombre</label><input id="mc-nombre" required /></div>
+        <div class="field"><label for="mc-direccion">Dirección</label><input id="mc-direccion" /></div>
+        <div class="field"><label for="mc-telefono">Teléfono</label><input id="mc-telefono" type="tel" /></div>
+        <div class="field"><label for="mc-indicaciones">Indicaciones</label><textarea id="mc-indicaciones" rows="2"></textarea></div>
+        <div class="row">
+          <div class="field"><label for="mc-desc-tipo">Descuento</label><select id="mc-desc-tipo"><option value="">Sin descuento</option><option value="monto">Monto $</option><option value="porcentaje">Porcentaje %</option></select></div>
+          <div class="field"><label for="mc-desc-valor">Valor</label><input id="mc-desc-valor" type="number" min="0" step="any" value="0" /></div>
+        </div>
+        <div class="row" style="justify-content:flex-end;margin-top:1rem;">
+          <button type="button" class="btn ghost" id="mc-cancel">Cancelar</button>
+          <button type="submit" class="btn" id="mc-save">Guardar cambios</button>
+        </div>
+      </form>
     </div>
   </div>
 
