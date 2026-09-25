@@ -19,6 +19,7 @@
   let lastSplit = null;
   let ocrBusy = false;
   let lastParsedMessage = "";
+  let expectedOcrTotal = null;
 
   const normalize = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
   const canonical = (name) => {
@@ -115,7 +116,11 @@
     const impossibleItem = items.find(i => (i.facturarFijo||0) + (i.noFacturarFijo||0) > i.cantidad);
     let msg = total ? `Total detectado: ${total}.` : "Pegá una captura o cargá las cantidades.";
     let error = false;
-    if ((factRaw !== "" && (!Number.isInteger(fact) || fact < 0)) ||
+    if (!total && Number.isInteger(fact) && Number.isInteger(nof)) {
+      msg = `Las pasadas suman ${fact + nof}, pero todavía no hay platos cargados. Pegá la planilla completa o ingresá las cantidades en la tabla.`; error = true;
+    } else if (expectedOcrTotal !== null && total !== expectedOcrTotal) {
+      msg = `La planilla indica ${expectedOcrTotal} platos, pero el OCR detectó ${total}. Corregí la tabla antes de generar.`; error = true;
+    } else if ((factRaw !== "" && (!Number.isInteger(fact) || fact < 0)) ||
         (noRaw !== "" && (!Number.isInteger(nof) || nof < 0))) {
       msg = "Las cantidades de cada pasada deben ser números enteros no negativos."; error = true;
     } else if (Number.isFinite(fact) && Number.isFinite(nof) && fact + nof !== total) {
@@ -166,6 +171,8 @@
 
   function parseOcrText(text) {
     const rawLines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const summary = rawLines.find(l => /^\W*(?:judiciales|total)\s*[:\-]?\s*\d+\s*\W*$/i.test(l));
+    if (summary) expectedOcrTotal = Number(summary.match(/\d+/)[0]);
     let hits = 0;
     for (const line of rawLines) {
       // El cierre menciona platos en los paréntesis, pero no es una fila de pedido.
@@ -193,11 +200,30 @@
   async function ocrImage(file) {
     if (!window.Tesseract) throw new Error("No se pudo cargar el motor OCR. Revisá la conexión a internet.");
     setStatus("Leyendo captura… La primera vez puede tardar unos segundos.", true);
-    const result = await Tesseract.recognize(file, "eng", {
+    let source = file;
+    if (window.createImageBitmap) {
+      const bitmap = await createImageBitmap(file);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width * 3;
+        canvas.height = bitmap.height * 3;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        source = canvas;
+      } finally { bitmap.close(); }
+    }
+    const worker = await Tesseract.createWorker("eng", 1, {
       logger: (m) => {
         if (m.status === "recognizing text") setStatus(`Leyendo captura… ${Math.round((m.progress||0)*100)}%`, true);
       }
     });
+    let result;
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK });
+      result = await worker.recognize(source);
+    } finally { await worker.terminate(); }
     const text = result?.data?.text || "";
     const hits = parseOcrText(text);
     const cierre = extractClosingLine(text);
@@ -205,7 +231,7 @@
       byId("jud-message").value = cierre;
       parseMessage(cierre);
     }
-    setStatus(hits ? `OCR listo: ${hits} platos detectados. Revisá las cantidades antes de generar.` : "OCR listo. No pude reconocer filas de platos; podés corregirlas manualmente.", false);
+    setStatus(hits ? `OCR listo: ${hits} filas leídas, ${totalItems()} platos. Revisá las cantidades antes de generar.` : "OCR listo. No pude reconocer filas de platos; podés corregirlas manualmente.", true);
   }
 
   function extractClosingLine(text) {
@@ -320,6 +346,7 @@
     items = BASE_NAMES.map(nombre => ({ nombre, cantidad:0, facturarFijo:0, noFacturarFijo:0 }));
     lastSplit = null;
     lastParsedMessage = "";
+    expectedOcrTotal = null;
     byId("jud-facturar").value = "";
     byId("jud-no-facturar").value = "";
     byId("jud-message").value = "";
