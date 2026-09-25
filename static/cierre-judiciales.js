@@ -18,14 +18,18 @@
   let items = [];
   let lastSplit = null;
   let ocrBusy = false;
+  let lastParsedMessage = "";
 
   const normalize = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
   const canonical = (name) => {
     const n = normalize(name);
-    for (const [key, vals] of Object.entries(ALIASES)) {
-      if (vals.some(v => n.includes(normalize(v)))) return key;
-    }
-    return null;
+    // Los nombres compuestos deben ganar sobre sus partes (Wrap Brie ≠ Brie).
+    const matches = Object.entries(ALIASES).flatMap(([key, vals]) => vals
+      .map(v => normalize(v))
+      .filter(v => (` ${n} `).includes(` ${v} `))
+      .map(v => ({ key, length: v.length })));
+    matches.sort((a,b) => b.length - a.length);
+    return matches[0]?.key || null;
   };
   const displayName = (key) => {
     const found = BASE_NAMES.find(n => canonical(n) === key);
@@ -82,6 +86,8 @@
 
   function recalc(changed) {
     syncItemsFromTable();
+    lastSplit = null;
+    byId("jud-results").classList.add("hidden");
     const total = totalItems();
     byId("jud-total").textContent = total;
     const factRaw = byId("jud-facturar").value.trim();
@@ -100,14 +106,19 @@
   function validate() {
     const box = byId("jud-validation");
     const total = totalItems();
-    const fact = parseInt(byId("jud-facturar").value,10);
-    const nof = parseInt(byId("jud-no-facturar").value,10);
+    const factRaw = byId("jud-facturar").value.trim();
+    const noRaw = byId("jud-no-facturar").value.trim();
+    const fact = factRaw === "" ? NaN : Number(factRaw);
+    const nof = noRaw === "" ? NaN : Number(noRaw);
     const forcedFact = items.reduce((s,i)=>s+(i.facturarFijo||0),0);
     const forcedNo = items.reduce((s,i)=>s+(i.noFacturarFijo||0),0);
     const impossibleItem = items.find(i => (i.facturarFijo||0) + (i.noFacturarFijo||0) > i.cantidad);
     let msg = total ? `Total detectado: ${total}.` : "Pegá una captura o cargá las cantidades.";
     let error = false;
-    if (Number.isFinite(fact) && Number.isFinite(nof) && fact + nof !== total) {
+    if ((factRaw !== "" && (!Number.isInteger(fact) || fact < 0)) ||
+        (noRaw !== "" && (!Number.isInteger(nof) || nof < 0))) {
+      msg = "Las cantidades de cada pasada deben ser números enteros no negativos."; error = true;
+    } else if (Number.isFinite(fact) && Number.isFinite(nof) && fact + nof !== total) {
       msg = `Facturar (${fact}) + No facturar (${nof}) debe dar ${total}.`; error = true;
     } else if (impossibleItem) {
       msg = `${impossibleItem.nombre}: pedís ${(impossibleItem.facturarFijo||0)} en Facturar + ${(impossibleItem.noFacturarFijo||0)} en No facturar, pero sólo hay ${impossibleItem.cantidad}.`; error = true;
@@ -118,43 +129,38 @@
     }
     box.textContent = msg;
     box.classList.toggle("error", error);
-    return !error && total > 0 && Number.isFinite(fact) && Number.isFinite(nof);
+    return !error && total > 0 && Number.isInteger(fact) && Number.isInteger(nof);
   }
 
   function parseMessage(text) {
-    const n = normalize(text);
-
-    // Leer "no facturar" primero y retirarlo antes de buscar "facturar".
-    const noMatch = n.match(/no\s*facturar\s*[:\-]?\s*(\d+)/i);
-    const factSource = n.replace(/no\s*facturar\s*[:\-]?\s*\d+(?:\s*\([^)]*\))?/gi, " ");
-    const factMatch = factSource.match(/(?:^|[^a-z])facturar\s*[:\-]?\s*(\d+)/i);
-    if (factMatch) byId("jud-facturar").value = +factMatch[1];
-    if (noMatch) byId("jud-no-facturar").value = +noMatch[1];
-
-    // Limpiar sólo las restricciones derivadas del mensaje. Las cantidades detectadas no se tocan.
+    if (!text.trim() || text === lastParsedMessage) return;
+    // Cada paréntesis pertenece a su pasada, incluso cuando ambas aparecen en una línea.
+    const blockRe = /(no\s*facturar|facturar)\s*[:\-]?\s*(\d+)\s*((?:\([^)]*\)\s*)*)/gi;
+    const blocks = [...text.matchAll(blockRe)];
+    if (!blocks.length) return;
     items.forEach(i => { i.facturarFijo = 0; i.noFacturarFijo = 0; });
-
-    // Cada paréntesis pertenece al bloque que lo precede:
-    // "Facturar 10 (1 Cobb) No facturar 8 (2 Cobb)" => Cobb 1/2.
-    const blockRe = /(no\s+facturar|facturar)\s*[:\-]?\s*\d+\s*((?:\([^)]*\)\s*)*)/gi;
     let block;
-    while ((block = blockRe.exec(text)) !== null) {
+    for (block of blocks) {
       const bucket = /^no/i.test(block[1]) ? "noFacturarFijo" : "facturarFijo";
-      const parens = block[2].match(/\(([^)]+)\)/g) || [];
+      byId(bucket === "facturarFijo" ? "jud-facturar" : "jud-no-facturar").value = +block[2];
+      const parens = block[3].match(/\(([^)]+)\)/g) || [];
       for (const p of parens) {
-        const m = p.match(/(\d+)\s*([A-Za-zÁÉÍÓÚÜáéíóúüñÑ ]+)/);
-        if (!m) continue;
-        const qty = +m[1];
-        const key = canonical(m[2]);
-        if (!key) continue;
-        let item = items.find(i => canonical(i.nombre) === key);
-        if (!item) {
-          item = { nombre:displayName(key), cantidad:0, facturarFijo:0, noFacturarFijo:0 };
-          items.push(item);
+        for (const entry of p.slice(1,-1).split(/[,;+]/)) {
+          const m = entry.trim().match(/^(\d+)\s*(.+)$/);
+          if (!m) continue;
+          const qty = +m[1];
+          const key = canonical(m[2]);
+          if (!key) continue;
+          let item = items.find(i => canonical(i.nombre) === key);
+          if (!item) {
+            item = { nombre:displayName(key), cantidad:0, facturarFijo:0, noFacturarFijo:0 };
+            items.push(item);
+          }
+          item[bucket] += qty;
         }
-        item[bucket] += qty;
       }
     }
+    lastParsedMessage = text;
     renderItems();
   }
 
@@ -162,6 +168,8 @@
     const rawLines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
     let hits = 0;
     for (const line of rawLines) {
+      // El cierre menciona platos en los paréntesis, pero no es una fila de pedido.
+      if (/\bfacturar\b/i.test(line)) continue;
       const key = canonical(line);
       if (!key) continue;
       const nums = line.match(/\d+/g);
@@ -245,7 +253,7 @@
 
   function generateSplit() {
     syncItemsFromTable();
-    // Parsear una vez antes de generar, sin tocar las cantidades pedidas.
+    // Si el mensaje cambió, leerlo una vez; conservar ajustes manuales posteriores.
     if (byId("jud-message").value.trim()) parseMessage(byId("jud-message").value);
     syncItemsFromTable();
     if (!validate()) return;
@@ -281,3 +289,81 @@
     lastSplit = { noMap, factMap };
     renderSplit();
   }
+  function renderSplit() {
+    if (!lastSplit) return;
+    const renderMap = (map) => [...map.entries()].filter(([,q])=>q>0).map(([idx,q]) =>
+      `<div class="jud-result-row"><span>${escapeHtmlLocal(items[idx].nombre)}</span><strong>${q}</strong></div>`
+    ).join("") || '<p class="muted">Sin ítems.</p>';
+    byId("jud-res-fact").innerHTML = `<div class="jud-result-list">${renderMap(lastSplit.factMap)}</div>`;
+    byId("jud-res-no").innerHTML = `<div class="jud-result-list">${renderMap(lastSplit.noMap)}</div>`;
+    byId("jud-res-fact-total").textContent = [...lastSplit.factMap.values()].reduce((a,b)=>a+b,0);
+    byId("jud-res-no-total").textContent = [...lastSplit.noMap.values()].reduce((a,b)=>a+b,0);
+    byId("jud-results").classList.remove("hidden");
+  }
+
+  function splitText(which) {
+    if (!lastSplit) return "";
+    const map = which === "facturar" ? lastSplit.factMap : lastSplit.noMap;
+    const total = [...map.values()].reduce((a,b)=>a+b,0);
+    const title = which === "facturar" ? "FACTURAR" : "NO FACTURAR";
+    return title+" — "+total+"\n"+[...map.entries()].filter(([,q])=>q>0).map(([idx,q])=>items[idx].nombre+": "+q).join("\n");
+  }
+
+  async function copySplit(which) {
+    const text = splitText(which);
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); if (window.toast) toast("Copiado", "ok"); }
+    catch (_) { window.prompt("Copiá el texto:", text); }
+  }
+
+  function resetAll() {
+    items = BASE_NAMES.map(nombre => ({ nombre, cantidad:0, facturarFijo:0, noFacturarFijo:0 }));
+    lastSplit = null;
+    lastParsedMessage = "";
+    byId("jud-facturar").value = "";
+    byId("jud-no-facturar").value = "";
+    byId("jud-message").value = "";
+    byId("jud-previews").innerHTML = "";
+    byId("jud-results").classList.add("hidden");
+    setStatus("", false);
+    renderItems();
+  }
+
+  function escapeAttr(s) { return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function escapeHtmlLocal(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (!byId("jud-drop")) return;
+    ensureBaseRows();
+    loadCartaNames();
+
+    byId("jud-drop").addEventListener("click", () => byId("jud-file").click());
+    byId("jud-file").addEventListener("change", (e) => handleFiles(e.target.files));
+    byId("jud-drop").addEventListener("dragover", (e) => { e.preventDefault(); byId("jud-drop").classList.add("dragover"); });
+    byId("jud-drop").addEventListener("dragleave", () => byId("jud-drop").classList.remove("dragover"));
+    byId("jud-drop").addEventListener("drop", (e) => { e.preventDefault(); byId("jud-drop").classList.remove("dragover"); handleFiles(e.dataTransfer.files); });
+
+    document.addEventListener("paste", (e) => {
+      const tabActive = document.querySelector('[data-tab="judiciales"]')?.classList.contains("active");
+      if (!tabActive) return;
+      const files = [...(e.clipboardData?.items || [])].filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i=>i.getAsFile()).filter(Boolean);
+      if (files.length) { e.preventDefault(); handleFiles(files); }
+    });
+
+    byId("jud-items").addEventListener("input", () => recalc());
+    byId("jud-items").addEventListener("click", (e) => {
+      const btn=e.target.closest(".jud-remove"); if (!btn) return;
+      const tr=btn.closest("tr"); items.splice(+tr.dataset.i,1); renderItems();
+    });
+    byId("jud-add-row").addEventListener("click", () => { syncItemsFromTable(); items.push({nombre:"",cantidad:0,facturarFijo:0,noFacturarFijo:0}); renderItems(); });
+    byId("jud-facturar").addEventListener("input", () => recalc("fact"));
+    byId("jud-no-facturar").addEventListener("input", () => recalc("no"));
+    byId("jud-message").addEventListener("change", () => parseMessage(byId("jud-message").value));
+    byId("jud-generate").addEventListener("click", generateSplit);
+    byId("jud-reroll").addEventListener("click", generateSplit);
+    byId("jud-reset").addEventListener("click", resetAll);
+    byId("jud-results").addEventListener("click", (e) => {
+      const btn=e.target.closest("[data-copy]"); if (btn) copySplit(btn.dataset.copy);
+    });
+  });
+})();
