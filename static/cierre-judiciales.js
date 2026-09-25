@@ -60,7 +60,8 @@
       <tr data-i="${idx}">
         <td><input class="jud-name" value="${escapeAttr(it.nombre)}" aria-label="Plato" /></td>
         <td class="right"><input class="jud-qty" type="number" min="0" step="1" value="${it.cantidad}" aria-label="Pedidas" /></td>
-        <td class="right"><input class="jud-force" type="number" min="0" max="${it.cantidad}" step="1" value="${it.forzar}" aria-label="Forzar no facturar" /></td>
+        <td class="right"><input class="jud-force-fact" type="number" min="0" max="${it.cantidad}" step="1" value="${it.facturarFijo || 0}" aria-label="Cantidad obligatoria en facturar" /></td>
+        <td class="right"><input class="jud-force-no" type="number" min="0" max="${it.cantidad}" step="1" value="${it.noFacturarFijo || 0}" aria-label="Cantidad obligatoria en no facturar" /></td>
         <td><button type="button" class="btn ghost sm jud-remove" title="Quitar">×</button></td>
       </tr>`).join("");
     recalc();
@@ -72,7 +73,8 @@
       if (!items[i]) return;
       items[i].nombre = tr.querySelector(".jud-name").value.trim() || "Sin nombre";
       items[i].cantidad = Math.max(0, parseInt(tr.querySelector(".jud-qty").value || "0",10) || 0);
-      items[i].facturarFijo = Math.max(0, parseInt(tr.querySelector(".jud-force-fact").value || "0",10) || 0);\n      items[i].noFacturarFijo = Math.max(0, parseInt(tr.querySelector(".jud-force-no").value || "0",10) || 0);
+      items[i].facturarFijo = Math.max(0, parseInt(tr.querySelector(".jud-force-fact").value || "0",10) || 0);
+      items[i].noFacturarFijo = Math.max(0, parseInt(tr.querySelector(".jud-force-no").value || "0",10) || 0);
     });
   }
 
@@ -154,7 +156,9 @@
       }
     }
     renderItems();
-  }  function generateSplit() {
+  }
+
+  function generateSplit() {
     syncItemsFromTable();
     // Parsear una vez antes de generar, sin tocar las cantidades pedidas.
     if (byId("jud-message").value.trim()) parseMessage(byId("jud-message").value);
