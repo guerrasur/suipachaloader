@@ -93,8 +93,11 @@ automáticamente. Al arrancar:
 - **Cuentas de clientes:** desde la pestaña Cuentas se pueden abrir cuentas de
   platos prepagados (cargar cantidad pagada en Bistro, anotar qué plato retira
   cada día y ver cuántos quedan) o de facturación semanal (registrar pedidos
-  con varios platos, agregados y precios; cerrar los pendientes hasta una fecha,
-  copiar el resumen y marcar el cierre cobrado). Las cuentas son registros
+  con varios platos, agregados y precios de lista precargados desde la Carta
+  (editables); cerrar los pendientes hasta una fecha, copiar el resumen y marcar
+  un cierre o todos los cierres cobrados). El saldo suma lo aún sin facturar y
+  lo facturado sin cobrar; llega a cero cuando se registran todos los cobros.
+  Las cuentas son registros
   operativos independientes: no crean pedidos en la tabla del día, tickets,
   rutas, entradas de caja ni facturas en Bistro. Para una entrega que también
   necesite ticket o ruta, hay que cargarla como pedido del día por separado.
