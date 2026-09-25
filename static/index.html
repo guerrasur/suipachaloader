@@ -14,6 +14,7 @@
       <button data-tab="pedidos" class="active">Pedidos</button>
       <button data-tab="carta">Carta</button>
       <button data-tab="clientes">Clientes</button>
+      <button data-tab="cuentas">Cuentas</button>
       <button data-tab="config">Configuración</button>
     </nav>
   </header>
@@ -268,6 +269,25 @@
           </table>
         </div>
       </div>
+    </section>
+
+    <!-- ============ CUENTAS ============ -->
+    <section id="view-cuentas" class="view">
+      <div class="card">
+        <div class="row between">
+          <div><h2>Cuentas de clientes</h2><p class="muted" style="margin:0;">Platos pagados en Bistro y pedidos para facturar por semana.</p></div>
+          <button type="button" class="btn secondary" id="cuenta-nueva-toggle">+ Abrir cuenta</button>
+        </div>
+        <form id="cuenta-nueva" class="panel hidden" style="margin-top:1rem;">
+          <div class="row">
+            <div class="field grow"><label for="cuenta-cliente">Cliente de la agenda</label><select id="cuenta-cliente" required></select></div>
+            <div class="field"><label for="cuenta-tipo">Modalidad</label><select id="cuenta-tipo"><option value="platos">Platos prepagados</option><option value="semanal">Facturación semanal</option></select></div>
+            <button type="submit" class="btn">Crear cuenta</button>
+          </div>
+        </form>
+        <div id="cuentas-list" class="cuentas-list"></div>
+      </div>
+      <div id="cuenta-detalle" class="card hidden" aria-live="polite"></div>
     </section>
 
     <!-- ============ CONFIG ============ -->

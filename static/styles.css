@@ -172,6 +172,25 @@ tbody tr:hover { background: var(--brand-soft); }
 .clientes-actions { white-space: nowrap; }
 #modal-cliente .field { margin-top: .65rem; }
 #modal-cliente .field input, #modal-cliente .field textarea { width: 100%; }
+
+/* Cuentas: saldo visible antes que los movimientos. */
+.cuentas-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .7rem; margin-top: 1rem; }
+.cuenta-card {
+  display: flex; flex-direction: column; gap: .2rem; text-align: left;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  padding: .8rem; border-radius: var(--radius-sm);
+}
+.cuenta-card:hover, .cuenta-card.active { border-color: var(--brand); background: var(--brand-soft); }
+.cuenta-card-name { font-weight: 700; }
+.cuenta-card small { color: var(--muted); }
+.cuenta-card strong { color: var(--brand); font-size: 1.1rem; }
+.cuenta-saldo { display: flex; align-items: baseline; gap: .55rem; color: var(--brand); margin: .5rem 0; }
+.cuenta-saldo strong { font-size: 2.4rem; line-height: 1; }
+.cuenta-saldo span { font-weight: 600; }
+.cuenta-linea { padding: .7rem 0; border-bottom: 1px solid var(--line); }
+.cuenta-linea .field input { max-width: 100%; }
+.cuenta-cierre { padding: .65rem 0; border-top: 1px solid var(--line); }
+.cuenta-cierre summary { cursor: pointer; font-weight: 600; }
 /* Estados de fila: fondo pastel legible + barra izquierda con el color del
    estado (mismo código que la leyenda sobre la tabla). */
 tr.anulado { background: var(--danger-bg) !important; box-shadow: inset 4px 0 0 var(--danger-strong); }
@@ -452,8 +471,8 @@ tbody tr.fila-elegida > td { background: #dbe6f8; }
   main { padding: .8rem; }
   header.topbar { padding: .5rem .8rem; }
   header.topbar h1 { font-size: 1.05rem; width: 100%; }
-  .tabs { margin-left: 0; width: 100%; }
-  .tabs button { flex: 1; text-align: center; padding: .45rem .35rem; font-size: .85rem; }
+  .tabs { margin-left: 0; width: 100%; overflow-x: auto; }
+  .tabs button { flex: 1; text-align: center; padding: .45rem .5rem; font-size: .85rem; white-space: nowrap; }
   .card { padding: .9rem; }
   .row.between { flex-direction: column; align-items: stretch; }
   .daynav { justify-content: space-between; }

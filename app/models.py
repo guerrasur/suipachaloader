@@ -36,6 +36,61 @@ class Cliente(Base):
     descuento_valor: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class CuentaCliente(Base):
+    __tablename__ = "cuentas_clientes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id"), unique=True, index=True)
+    tipo: Mapped[str] = mapped_column(String)  # platos o semanal
+    cliente: Mapped["Cliente"] = relationship()
+
+
+class MovimientoPlatos(Base):
+    __tablename__ = "movimientos_platos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cuenta_id: Mapped[int] = mapped_column(ForeignKey("cuentas_clientes.id"), index=True)
+    fecha: Mapped[date] = mapped_column(Date, default=date.today)
+    tipo: Mapped[str] = mapped_column(String)  # carga o retiro
+    cantidad: Mapped[int] = mapped_column(Integer)
+    plato: Mapped[str] = mapped_column(String, default="")
+    nota: Mapped[str] = mapped_column(Text, default="")
+
+
+class CierreCuenta(Base):
+    __tablename__ = "cierres_cuenta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cuenta_id: Mapped[int] = mapped_column(ForeignKey("cuentas_clientes.id"), index=True)
+    fecha: Mapped[date] = mapped_column(Date, default=date.today)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    pagado: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PedidoCuenta(Base):
+    __tablename__ = "pedidos_cuenta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cuenta_id: Mapped[int] = mapped_column(ForeignKey("cuentas_clientes.id"), index=True)
+    fecha: Mapped[date] = mapped_column(Date, default=date.today)
+    nota: Mapped[str] = mapped_column(Text, default="")
+    cierre_id: Mapped[int | None] = mapped_column(ForeignKey("cierres_cuenta.id"), nullable=True)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    items: Mapped[list["ItemCuenta"]] = relationship(cascade="all, delete-orphan", order_by="ItemCuenta.id")
+
+
+class ItemCuenta(Base):
+    __tablename__ = "items_cuenta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pedido_id: Mapped[int] = mapped_column(ForeignKey("pedidos_cuenta.id"), index=True)
+    plato: Mapped[str] = mapped_column(String)
+    cantidad: Mapped[int] = mapped_column(Integer)
+    precio_unitario: Mapped[float] = mapped_column(Float)
+    extra: Mapped[str] = mapped_column(String, default="")
+    precio_extra: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class Plato(Base):
     __tablename__ = "platos"
 
