@@ -15,6 +15,7 @@
       <button data-tab="carta">Carta</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="cuentas">Cuentas</button>
+      <button data-tab="judiciales">Cierre Judiciales</button>
       <button data-tab="config">Configuración</button>
     </nav>
   </header>
@@ -290,6 +291,76 @@
       <div id="cuenta-detalle" class="card hidden" aria-live="polite"></div>
     </section>
 
+
+    <!-- ============ CIERRE JUDICIALES ============ -->
+    <section id="view-judiciales" class="view">
+      <div class="card judiciales-card">
+        <div class="row between judiciales-heading">
+          <div>
+            <h2>Cierre Judiciales</h2>
+            <p class="muted" style="margin:0;">Pegá o cargá la captura del cierre. El OCR lee las cantidades y arma las dos pasadas de Bistro sin IA ni servicios externos de análisis.</p>
+          </div>
+          <button type="button" class="btn ghost sm" id="jud-reset">Limpiar</button>
+        </div>
+
+        <div id="jud-drop" class="jud-drop" tabindex="0" role="button" aria-label="Pegar o cargar captura">
+          <input type="file" id="jud-file" accept="image/*" multiple hidden />
+          <div class="jud-drop-icon">📷</div>
+          <strong>Ctrl+V para pegar una captura</strong>
+          <span class="muted">o hacé clic para elegir una imagen. Podés pegar la planilla y después el mensaje de “Facturar / No facturar”.</span>
+        </div>
+
+        <div id="jud-previews" class="jud-previews"></div>
+        <div id="jud-ocr-status" class="banner info hidden" aria-live="polite"></div>
+
+        <div class="jud-grid">
+          <div class="panel">
+            <div class="row between">
+              <h3 style="margin:0;">Cantidades detectadas</h3>
+              <button type="button" class="btn secondary sm" id="jud-add-row">+ Agregar plato</button>
+            </div>
+            <p class="muted" style="font-size:.8rem;margin:.35rem 0 .7rem;">Revisá esta tabla antes de generar. Podés corregir cualquier lectura del OCR.</p>
+            <div class="tbl-wrap">
+              <table class="jud-table">
+                <thead><tr><th>Plato</th><th class="right">Pedidas</th><th class="right">Forzar no fact.</th><th></th></tr></thead>
+                <tbody id="jud-items"></tbody>
+                <tfoot><tr><th>Total</th><th class="right" id="jud-total">0</th><th></th><th></th></tr></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3 style="margin-top:0;">Reparto Bistro</h3>
+            <div class="row">
+              <div class="field"><label>Facturar</label><input id="jud-facturar" type="number" min="0" step="1" placeholder="Ej. 16" /></div>
+              <div class="field"><label>No facturar</label><input id="jud-no-facturar" type="number" min="0" step="1" placeholder="Se completa solo" /></div>
+            </div>
+            <div class="field" style="margin-top:.55rem;">
+              <label>Texto del mensaje (opcional)</label>
+              <input id="jud-message" placeholder="Ej. Facturar 16 / No facturar 11 (2 Cobb)" />
+              <small class="muted">También podés pegar una captura del mensaje y el OCR intenta completar estos valores.</small>
+            </div>
+            <div class="row" style="margin-top:.8rem;flex-wrap:wrap;">
+              <button type="button" class="btn" id="jud-generate">Generar reparto</button>
+              <button type="button" class="btn secondary" id="jud-reroll">Volver a sortear</button>
+            </div>
+            <div id="jud-validation" class="jud-validation muted" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div id="jud-results" class="jud-results hidden">
+          <div class="jud-result panel">
+            <div class="row between"><h3>FACTURAR — <span id="jud-res-fact-total">0</span></h3><button type="button" class="btn secondary sm" data-copy="facturar">Copiar</button></div>
+            <div id="jud-res-fact"></div>
+          </div>
+          <div class="jud-result panel">
+            <div class="row between"><h3>NO FACTURAR — <span id="jud-res-no-total">0</span></h3><button type="button" class="btn secondary sm" data-copy="no-facturar">Copiar</button></div>
+            <div id="jud-res-no"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ CONFIG ============ -->
     <section id="view-config" class="view">
       <div class="card" style="max-width:520px;">
@@ -496,6 +567,8 @@
 
   <div id="toasts" aria-live="polite"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="/app.js"></script>
+  <script src="/cierre-judiciales.js"></script>
 </body>
 </html>
