@@ -1646,6 +1646,48 @@ $("filters").querySelectorAll(".chip").forEach((c) =>
   })
 );
 
+// Vista global para decidir manualmente qué pedidos conviene mandar juntos.
+// No mira el repartidor asignado: incluye todo Envío que todavía no salió.
+$("btn-mapa-pendientes").addEventListener("click", () => {
+  const pendientes = state.pedidos.filter(
+    (p) => p.tipo === "Envío" && !p.anulado && !p.hora_salida
+  );
+  if (!pendientes.length) {
+    toast("No hay envíos pendientes de salir para este día.", "info");
+    return;
+  }
+
+  // Una misma dirección puede tener más de un pedido. Para el mapa alcanza con
+  // una parada y además evitamos gastar waypoints repetidos.
+  const direcciones = [];
+  const vistas = new Set();
+  for (const p of pendientes) {
+    const direccion = (p.cliente_direccion || "").trim();
+    if (!direccion) continue;
+    const clave = direccionParaMaps(direccion).toLocaleLowerCase("es-AR");
+    if (!clave || vistas.has(clave)) continue;
+    vistas.add(clave);
+    direcciones.push(direccion);
+  }
+
+  if (!direcciones.length) {
+    toast("Los envíos pendientes no tienen direcciones cargadas.", "info");
+    return;
+  }
+
+  const link = googleMapsRouteLink(direcciones);
+  if (!link) {
+    toast("No se pudo armar la ruta de Google Maps.", "error");
+    return;
+  }
+
+  window.open(link, "_blank", "noopener");
+  const sinDireccion = pendientes.filter((p) => !(p.cliente_direccion || "").trim()).length;
+  if (sinDireccion) {
+    toast(`${sinDireccion} pedido${sinDireccion === 1 ? "" : "s"} sin dirección no ${sinDireccion === 1 ? "se incluyó" : "se incluyeron"} en el mapa.`, "info");
+  }
+});
+
 function pasaFiltro(p) {
   switch (state.filtro) {
     case "pend-salir": return p.tipo === "Envío" && !p.hora_salida && !p.anulado;
