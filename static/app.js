@@ -1648,6 +1648,9 @@ $("filters").querySelectorAll(".chip").forEach((c) =>
 
 // Vista global para decidir manualmente qué pedidos conviene mandar juntos.
 // No mira el repartidor asignado: incluye todo Envío que todavía no salió.
+$("mapa-pendientes-cerrar").addEventListener("click", () =>
+  $("modal-mapa-pendientes").classList.remove("show")
+);
 $("btn-mapa-pendientes").addEventListener("click", () => {
   const pendientes = state.pedidos.filter(
     (p) => p.tipo === "Envío" && !p.anulado && !p.hora_salida
@@ -1659,7 +1662,7 @@ $("btn-mapa-pendientes").addEventListener("click", () => {
 
   // Una misma dirección puede tener más de un pedido. Para el mapa alcanza con
   // una parada y además evitamos gastar waypoints repetidos.
-  const direcciones = [];
+  const paradas = [];
   const vistas = new Set();
   for (const p of pendientes) {
     const direccion = (p.cliente_direccion || "").trim();
@@ -1667,22 +1670,45 @@ $("btn-mapa-pendientes").addEventListener("click", () => {
     const clave = direccionParaMaps(direccion).toLocaleLowerCase("es-AR");
     if (!clave || vistas.has(clave)) continue;
     vistas.add(clave);
-    direcciones.push(direccion);
+    paradas.push({ direccion });
   }
 
-  if (!direcciones.length) {
+  if (!paradas.length) {
     toast("Los envíos pendientes no tienen direcciones cargadas.", "info");
     return;
   }
 
-  const link = googleMapsRouteLink(direcciones);
-  if (!link) {
-    toast("No se pudo armar la ruta de Google Maps.", "error");
-    return;
+  const sinDireccion = pendientes.filter((p) => !(p.cliente_direccion || "").trim()).length;
+  // Maps admite sólo 3 puntos intermedios en navegadores móviles. Mostrar
+  // tramos de hasta 4 destinos evita que desaparezcan paradas sin avisar.
+  // Se repite la última parada como origen del tramo siguiente.
+  const tramos = [];
+  for (let i = 0; i < paradas.length; i += 4) {
+    const grupo = paradas.slice(i, i + 4);
+    const origen = i ? paradas[i - 1].direccion : null;
+    const link = googleMapsRouteLink(grupo.map((p) => p.direccion), origen);
+    tramos.push({ grupo, link, primero: i + 1 });
   }
 
-  window.open(link, "_blank", "noopener");
-  const sinDireccion = pendientes.filter((p) => !(p.cliente_direccion || "").trim()).length;
+  if (tramos.length === 1 && tramos[0].link && tramos[0].link.length <= 2048) {
+    window.open(tramos[0].link, "_blank", "noopener");
+  } else {
+    $("mapa-pendientes-info").textContent =
+      `${pendientes.length} pedidos, ${paradas.length} direcciones distintas. `
+      + "Maps limita las paradas por enlace; abrí los tramos en orden. "
+      + "El orden mostrado es el de carga, no una ruta optimizada."
+      + (sinDireccion ? ` ${sinDireccion} pedido${sinDireccion === 1 ? "" : "s"} sin dirección ${sinDireccion === 1 ? "queda" : "quedan"} fuera.` : "");
+    $("mapa-pendientes-contenido").innerHTML = tramos.map(({ grupo, link, primero }, i) => `
+      <div class="card" style="margin:.6rem 0;padding:.8rem;">
+        <strong>Tramo ${i + 1} · paradas ${primero}–${primero + grupo.length - 1}</strong>
+        <ol style="margin:.4rem 0 .7rem;">${grupo.map((p) =>
+          `<li>${escapeHtml(p.direccion)}</li>`).join("")}</ol>
+        ${link.length <= 2048
+          ? `<a class="btn secondary sm" href="${escapeAttr(link)}" target="_blank" rel="noopener">Abrir tramo en Google Maps</a>`
+          : `<p class="banner warn">Este tramo tiene direcciones demasiado largas para un enlace de Maps.</p>`}
+      </div>`).join("");
+    $("modal-mapa-pendientes").classList.add("show");
+  }
   if (sinDireccion) {
     toast(`${sinDireccion} pedido${sinDireccion === 1 ? "" : "s"} sin dirección no ${sinDireccion === 1 ? "se incluyó" : "se incluyeron"} en el mapa.`, "info");
   }
@@ -2065,10 +2091,10 @@ function googleMapsSearchLink(direccion) {
 // Ruta multi-parada en el orden recibido. Espejo de `google_maps_route_link` en
 // app/routing.py: se arma acá también porque el orden lo puede cambiar el
 // usuario a mano después de que la API devolvió el suyo.
-function googleMapsRouteLink(direccionesEnOrden) {
+function googleMapsRouteLink(direccionesEnOrden, origenAnterior = null) {
   const paradas = (direccionesEnOrden || []).map(direccionParaMaps).filter(Boolean);
   if (!paradas.length) return "";
-  const origen = direccionParaMaps((_cfgCache && _cfgCache.direccion_local) || "");
+  const origen = direccionParaMaps(origenAnterior || ((_cfgCache && _cfgCache.direccion_local) || ""));
   let url = "https://www.google.com/maps/dir/?api=1&destination="
     + encodeURIComponent(paradas[paradas.length - 1]) + "&travelmode=driving";
   if (origen) url += "&origin=" + encodeURIComponent(origen);
@@ -2727,12 +2753,13 @@ const MODAL_CERRAR = {
   "modal-fact": "fact-cerrar",
   "modal-ticket": "ticket-cerrar",
   "modal-rutas": "rutas-cerrar",
+  "modal-mapa-pendientes": "mapa-pendientes-cerrar",
   "modal-plato": "mp-cancel",
   "modal-cliente": "mc-cancel",
 };
 // Sólo los modales sin campos editables cierran con click afuera (un click
 // accidental no puede hacer perder lo tipeado en los de formulario).
-const MODALES_SOLO_LECTURA = new Set(["modal-fact", "modal-ticket", "modal-rutas"]);
+const MODALES_SOLO_LECTURA = new Set(["modal-fact", "modal-ticket", "modal-rutas", "modal-mapa-pendientes"]);
 
 function cerrarModal(back) { $(MODAL_CERRAR[back.id])?.click(); }
 
