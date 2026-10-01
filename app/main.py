@@ -24,6 +24,7 @@ _COLUMNAS_NUEVAS = [
     ("pedidos", "numero", "INTEGER"),
     ("pedidos", "cliente_telefono", "VARCHAR NOT NULL DEFAULT ''"),
     ("pedidos", "pagado", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("pedidos", "hora_salida_programada", "DATETIME"),
 ]
 
 

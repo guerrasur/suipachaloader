@@ -3,9 +3,10 @@ entre los repartidores disponibles y arma links de Google Maps para cada
 grupo."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import config as cfg
@@ -31,6 +32,7 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
     if not nombres:
         raise HTTPException(400, "Cargá primero los repartidores del día.")
 
+    ahora = datetime.now()
     pedidos = (
         db.query(Pedido)
         .filter(
@@ -38,6 +40,10 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
             Pedido.tipo == "Envío",
             Pedido.anulado.is_(False),
             Pedido.hora_salida.is_(None),
+            or_(
+                Pedido.hora_salida_programada.is_(None),
+                Pedido.hora_salida_programada <= ahora,
+            ),
         )
         .order_by(Pedido.hora_pedido)
         .all()
@@ -102,6 +108,7 @@ def optimizar_repartidor(repartidor: str, fecha: date | None = None, db: Session
     if not repartidor:
         raise HTTPException(400, "Falta el repartidor.")
 
+    ahora = datetime.now()
     pedidos = (
         db.query(Pedido)
         .filter(
@@ -109,6 +116,10 @@ def optimizar_repartidor(repartidor: str, fecha: date | None = None, db: Session
             Pedido.tipo == "Envío",
             Pedido.anulado.is_(False),
             Pedido.hora_salida.is_(None),
+            or_(
+                Pedido.hora_salida_programada.is_(None),
+                Pedido.hora_salida_programada <= ahora,
+            ),
             Pedido.repartidor == repartidor,
         )
         .order_by(Pedido.hora_pedido)

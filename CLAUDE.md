@@ -60,6 +60,11 @@ existente. No hay changelog aparte; el resumen va en el mensaje de commit.
   o las bases ya instaladas no la van a tener.
 - Los pedidos anulados nunca se borran (solo se marcan) salvo borrado
   definitivo explícito; no restar de totales/alertas contando anulados.
+- `Pedido.hora_salida_programada` es la hora prevista y `hora_salida` es la
+  salida real. Mientras la programada esté en el futuro, el envío no debe
+  considerarse pendiente operativo: queda fuera de demoras, filtros/mapas de
+  despacho, tickets combinados y endpoints de optimización/asignación. Cuando
+  llega la hora, vuelve al flujo normal y la demora se cuenta desde esa hora.
 - Antes de dar por terminado un cambio de frontend, probarlo en el navegador
   (la skill `run` levanta la app) — los tests de `pytest` cubren el backend,
   no la UI.

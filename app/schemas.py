@@ -143,6 +143,7 @@ class PedidoIn(_ValidadoresPedido):
     descuento_valor: float = 0.0
     metodo_pago: str = "Efectivo"
     pago_efectivo_detalle: str = ""
+    hora_salida_programada: datetime | None = None
     repartidor: str = ""
     notas: str = ""
 
@@ -162,6 +163,7 @@ class PedidoPatch(_ValidadoresPedido):
     descuento_valor: float | None = None
     metodo_pago: str | None = None
     pago_efectivo_detalle: str | None = None
+    hora_salida_programada: datetime | None = None
     repartidor: str | None = None
     hora_salida: datetime | None = None
     facturado: bool | None = None
@@ -189,6 +191,7 @@ class PedidoOut(BaseModel):
     metodo_pago: str
     pago_efectivo_detalle: str
     hora_pedido: datetime
+    hora_salida_programada: datetime | None
     repartidor: str
     hora_salida: datetime | None
     facturado: bool

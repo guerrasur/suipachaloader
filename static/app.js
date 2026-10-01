@@ -603,7 +603,10 @@ $("add-pdd").addEventListener("click", () => addItem(true));
 $("btn-cancelar").addEventListener("click", resetForm);
 
 function toggleEnvio() {
-  $("row-envio").querySelector("#f-envio").disabled = $("f-tipo").value !== "Envío";
+  const esEnvio = $("f-tipo").value === "Envío";
+  $("row-envio").querySelector("#f-envio").disabled = !esEnvio;
+  $("f-hora-programada").disabled = !esEnvio;
+  $("wrap-hora-programada").style.display = esEnvio ? "" : "none";
 }
 function toggleVuelto() {
   $("wrap-vuelto").style.display = $("f-pago").value === "Efectivo" ? "" : "none";
@@ -652,6 +655,9 @@ $("pedido-form").addEventListener("submit", async (e) => {
     descuento_valor: +$("f-desc-valor").value || 0,
     metodo_pago: $("f-pago").value,
     pago_efectivo_detalle: $("f-pago").value === "Efectivo" ? $("f-vuelto").value.trim() : "",
+    hora_salida_programada: $("f-tipo").value === "Envío" && $("f-hora-programada").value
+      ? `${$("f-fecha").value || state.fecha}T${$("f-hora-programada").value}:00`
+      : null,
     repartidor: $("f-repartidor").value.trim(),
     notas: $("f-notas").value.trim(),
   };
@@ -1653,7 +1659,7 @@ $("mapa-pendientes-cerrar").addEventListener("click", () =>
 );
 $("btn-mapa-pendientes").addEventListener("click", () => {
   const pendientes = state.pedidos.filter(
-    (p) => p.tipo === "Envío" && !p.anulado && !p.hora_salida
+    (p) => p.tipo === "Envío" && !p.anulado && !p.hora_salida && !esperandoHoraProgramada(p)
   );
   if (!pendientes.length) {
     toast("No hay envíos pendientes de salir para este día.", "info");
@@ -1714,9 +1720,15 @@ $("btn-mapa-pendientes").addEventListener("click", () => {
   }
 });
 
+function esperandoHoraProgramada(p) {
+  if (!p?.hora_salida_programada || p.hora_salida) return false;
+  const ts = new Date(p.hora_salida_programada).getTime();
+  return Number.isFinite(ts) && Date.now() < ts;
+}
+
 function pasaFiltro(p) {
   switch (state.filtro) {
-    case "pend-salir": return p.tipo === "Envío" && !p.hora_salida && !p.anulado;
+    case "pend-salir": return p.tipo === "Envío" && !p.hora_salida && !p.anulado && !esperandoHoraProgramada(p);
     case "pend-facturar": return !p.facturado && !p.anulado;
     case "envio": return p.tipo === "Envío";
     case "reserva": return p.tipo === "Reserva";
@@ -1743,11 +1755,13 @@ function hhmmAhora() {
 function renderRow(p) {
   const tr = document.createElement("tr");
   tr.dataset.id = p.id;
+  const esperandoProgramado = esperandoHoraProgramada(p);
   if (p.anulado) tr.className = "anulado";
   else {
-    // Ya salió: fila verde (gana sobre las alertas de color; el badge
-    // SIN FACT. en la celda Estado sigue avisando igual).
+    // Ya salió: fila verde. Antes de una hora programada, la fila queda azul
+    // y no entra todavía al circuito de pendientes/rutas.
     if (p.hora_salida) tr.classList.add("salio");
+    else if (esperandoProgramado) tr.classList.add("programado");
     else {
       if (p.demorado) tr.classList.add("demorado");
       if (p.alerta_sin_facturar) tr.classList.add("sinfact");
@@ -1756,9 +1770,11 @@ function renderRow(p) {
   const items = p.items.map((i) => `${i.cantidad}x ${escapeHtml(i.nombre)}`).join("<br>");
   const hs = hhmm(p.hora_salida);
   const hp = hhmm(p.hora_pedido);
-  // Todo el estado del pedido (salida, alertas, facturado) vive en una sola
-  // celda "Estado" para poder leerlo de un vistazo.
-  const badges = (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
+  const hsp = hhmm(p.hora_salida_programada);
+  // Todo el estado del pedido (salida programada, salida real, alertas,
+  // facturado) vive en una sola celda "Estado".
+  const badges = (hsp ? `<span class="badge programado" title="${esperandoProgramado ? "Todavía no entra en rutas ni demoras" : "Hora programada ya habilitada"}">⏱ SALIDA ${hsp}</span> ` : "") +
+                 (p.demorado ? '<span class="badge demora">DEMORA</span> ' : "") +
                  (p.alerta_sin_facturar ? '<span class="badge sf">SIN FACT.</span> ' : "");
   // Las reservas no "salen" con un repartidor: se retiran por el local, así
   // que en vez de "Salió" llevan un botón "Reservado" que se marca (azul ->
@@ -1907,6 +1923,7 @@ function editarPedido(p) {
   $("f-pago").value = p.metodo_pago;
   $("f-vuelto").value = p.pago_efectivo_detalle;
   fillRepartidorSelect($("f-repartidor"), p.repartidor);
+  $("f-hora-programada").value = hhmm(p.hora_salida_programada);
   $("f-envio").value = p.costo_envio;
   $("f-no-envio").checked = p.no_cobrar_envio;
   $("f-desc-tipo").value = p.descuento_tipo || "";
@@ -2385,7 +2402,7 @@ $("ticket-ruta").addEventListener("click", async () => {
 function pedidosPendientesPorRepartidor() {
   const map = new Map();
   for (const p of state.pedidos) {
-    if (p.tipo !== "Envío" || p.anulado || p.hora_salida) continue;
+    if (p.tipo !== "Envío" || p.anulado || p.hora_salida || esperandoHoraProgramada(p)) continue;
     const rep = (p.repartidor || "").trim();
     if (!rep) continue;
     if (!map.has(rep)) map.set(rep, []);

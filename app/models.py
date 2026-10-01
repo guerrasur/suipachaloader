@@ -131,6 +131,9 @@ class Pedido(Base):
     pago_efectivo_detalle: Mapped[str] = mapped_column(String, default="")
 
     hora_pedido: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # Hora deseada de despacho. Es distinta de hora_salida (la salida real):
+    # mientras no llegue, el pedido no entra en rutas ni alertas de demora.
+    hora_salida_programada: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     repartidor: Mapped[str] = mapped_column(String, default="")
     hora_salida: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

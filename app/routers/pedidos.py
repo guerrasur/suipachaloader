@@ -57,15 +57,30 @@ def _serializar(db: Session, p: Pedido, config: dict[str, str] | None = None) ->
     out = PedidoOut.model_validate(p).model_dump()
     out["demorado"] = False
     out["alerta_sin_facturar"] = False
+    ahora = datetime.now()
+    esperando_programado = bool(
+        p.tipo == "Envío"
+        and not p.hora_salida
+        and p.hora_salida_programada
+        and ahora < p.hora_salida_programada
+    )
+    out["esperando_hora_salida"] = esperando_programado
     if p.anulado or p.fecha != date.today():
         return out
 
+    # Mientras espera una hora de salida programada no debe aparecer como
+    # demorado ni como "sin facturar tarde". Al llegar la hora, el refresco
+    # periódico lo hace entrar automáticamente al flujo normal.
+    if esperando_programado:
+        return out
+
     valores = config if config is not None else cfg.get_all(db)
-    ahora = datetime.now()
-    # Demora de salida: sólo aplica a pedidos con envío pendientes de salir.
+    # Demora de salida: para pedidos programados se cuenta desde la hora
+    # programada, no desde el momento (posiblemente mucho anterior) de carga.
     if p.tipo == "Envío" and not p.hora_salida:
         limite = int(valores.get("minutos_demora_salida") or 30)
-        if p.hora_pedido and ahora - p.hora_pedido > timedelta(minutes=limite):
+        inicio_demora = p.hora_salida_programada or p.hora_pedido
+        if inicio_demora and ahora - inicio_demora > timedelta(minutes=limite):
             out["demorado"] = True
     # Sin facturar después de la hora configurada.
     if not p.facturado:
@@ -131,6 +146,7 @@ def crear(data: PedidoIn, db: Session = Depends(get_db)):
         descuento_valor=data.descuento_valor,
         metodo_pago=data.metodo_pago,
         pago_efectivo_detalle=data.pago_efectivo_detalle,
+        hora_salida_programada=data.hora_salida_programada,
         repartidor=data.repartidor,
         notas=data.notas,
         hora_pedido=datetime.now(),

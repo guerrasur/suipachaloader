@@ -199,6 +199,8 @@ tr.anulado td { color: #9aa2ab; text-decoration: line-through; }
 tr.anulado:hover { background: #fbdedb !important; }
 tr.salio { background: var(--ok-bg) !important; box-shadow: inset 4px 0 0 var(--ok); }
 tr.salio:hover { background: #d9efe1 !important; }
+tr.programado { background: var(--brand-soft) !important; box-shadow: inset 4px 0 0 var(--brand); }
+tr.programado:hover { background: #dde7f8 !important; }
 tr.demorado { background: var(--demora-bg) !important; box-shadow: inset 4px 0 0 var(--danger); }
 tr.demorado:hover { background: #fbd5d1 !important; }
 tr.sinfact { background: var(--warn-bg) !important; box-shadow: inset 4px 0 0 var(--warn); }
@@ -216,6 +218,7 @@ td .inline:focus { border-color: var(--brand); background: #fff; outline: none; 
 .badge.demora { background: var(--danger); color: #fff; }
 .badge.sf { background: var(--warn); color: #fff; }
 .badge.salio { background: var(--ok); color: #fff; }
+.badge.programado { background: var(--brand); color: #fff; }
 
 /* Celda "Estado": salida + facturado juntos, apilados. */
 .td-estado { min-width: 120px; }
@@ -241,6 +244,7 @@ td.right, .num-pedido, .stat .v { font-variant-numeric: tabular-nums; }
   margin-right: .3em; vertical-align: baseline;
 }
 .dot-ok { background: var(--ok); }
+.dot-programado { background: var(--brand); }
 .dot-danger { background: var(--danger); }
 .dot-warn { background: var(--warn); }
 .dot-anulado { background: var(--danger-strong); }

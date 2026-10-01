@@ -84,6 +84,11 @@ automáticamente. Al arrancar:
   orden se mantiene mientras no se recargue la página.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
+- **Salida programada:** un envío puede quedar cargado con una hora prevista de
+  salida. Hasta esa hora sigue visible pero no se marca demorado, no aparece
+  entre los pendientes de despacho, no entra en "Ver todos en Maps", tickets
+  combinados ni optimización/asignación de rutas. Al llegar la hora entra
+  automáticamente al flujo normal y la demora empieza a contarse desde ahí.
 - **Alertas de demora:** pedidos sin salir pasados X minutos y sin facturar
   después de la hora configurada; aviso de pendientes de días anteriores.
 - **Pedidos para el día siguiente** (fecha futura) y **reservas** para
