@@ -135,6 +135,8 @@ class Pedido(Base):
     # mientras no llegue, el pedido no entra en rutas ni alertas de demora.
     hora_salida_programada: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     repartidor: Mapped[str] = mapped_column(String, default="")
+    # Posición de entrega confirmada al asignar una ruta (0 = primera).
+    orden_ruta: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hora_salida: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     facturado: Mapped[bool] = mapped_column(Boolean, default=False)

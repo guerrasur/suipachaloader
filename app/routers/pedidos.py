@@ -181,6 +181,12 @@ def editar(pedido_id: int, data: PedidoPatch, db: Session = Depends(get_db)):
     nueva_fecha = campos.get("fecha")
     reasignar_numero = nueva_fecha is not None and nueva_fecha != pedido.fecha
 
+    # Una posición corresponde a un repartidor y un día concretos. Al mover
+    # el pedido a otro recorrido, no hereda la posición del anterior.
+    cambia_repartidor = "repartidor" in campos and campos["repartidor"] != pedido.repartidor
+    if reasignar_numero or (cambia_repartidor and "orden_ruta" not in campos):
+        campos["orden_ruta"] = None
+
     for k, v in campos.items():
         setattr(pedido, k, v)
 

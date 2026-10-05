@@ -81,7 +81,11 @@ automáticamente. Al arrancar:
   grupo de rutas como en el ticket del repartidor. La imagen (numerada 1, 2,
   3…), los contactos copiados y el link de la ruta en Maps salen siempre en ese
   orden, así se le manda al repartidor tal como los tiene que entregar. El
-  orden se mantiene mientras no se recargue la página.
+  orden confirmado con "Confirmar y asignar todo" se guarda por repartidor y
+  se recupera al abrir su ticket, incluso después de recargar la página. Los
+  ajustes manuales posteriores en el ticket se mantienen durante la sesión.
+  "Copiar contactos" agrega al final el enlace de la ruta completa en ese
+  mismo orden, desde la dirección del local.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Salida programada:** un envío puede quedar cargado con una hora prevista de

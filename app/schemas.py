@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import METODOS_PAGO, TIPOS_DESCUENTO, TIPOS_PEDIDO
 
@@ -165,6 +165,7 @@ class PedidoPatch(_ValidadoresPedido):
     pago_efectivo_detalle: str | None = None
     hora_salida_programada: datetime | None = None
     repartidor: str | None = None
+    orden_ruta: int | None = Field(default=None, ge=0)
     hora_salida: datetime | None = None
     facturado: bool | None = None
     pagado: bool | None = None
@@ -193,6 +194,7 @@ class PedidoOut(BaseModel):
     hora_pedido: datetime
     hora_salida_programada: datetime | None
     repartidor: str
+    orden_ruta: int | None
     hora_salida: datetime | None
     facturado: bool
     hora_facturado: datetime | None

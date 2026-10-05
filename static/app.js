@@ -1413,6 +1413,7 @@ function renderRutas(r) {
     b.addEventListener("click", () => {
       const g = r.grupos[+b.dataset.gi];
       const peds = g.pedidos.map((gp) => state.pedidos.find((p) => p.id === gp.id)).filter(Boolean);
+      guardarOrdenLote("Repartidor " + g.etiqueta, g.pedidos.map((p) => p.id));
       openTicketLote(peds, "Repartidor " + g.etiqueta);
     })
   );
@@ -1432,9 +1433,10 @@ function renderRutas(r) {
     btn.textContent = "Asignando…";
     try {
       for (const { g, repartidor } of asignaciones) {
-        for (const p of g.pedidos) {
-          await api(`/api/pedidos/${p.id}`, { method: "PATCH", body: JSON.stringify({ repartidor }) });
+        for (const [orden_ruta, p] of g.pedidos.entries()) {
+          await api(`/api/pedidos/${p.id}`, { method: "PATCH", body: JSON.stringify({ repartidor, orden_ruta }) });
         }
+        guardarOrdenLote("Repartidor " + repartidor, g.pedidos.map((p) => p.id));
       }
       btn.textContent = "✅ Asignado";
       await loadDay();
@@ -2167,10 +2169,8 @@ function descargarTicket() {
 // ---- Ticket combinado: una imagen + un contacto con todos los pedidos que
 //      lleva un mismo repartidor. Reusa el modal #modal-ticket en modo lote.
 
-// Orden manual de cada lote, recordado mientras dure la sesión (no se guarda en
-// la base): si se reacomodan las paradas en las rutas optimizadas o en el
-// ticket y después se vuelve a abrir, siguen como se las dejó. Se pierde al
-// recargar la página, que es cuando el día ya cambió o se rearmó todo.
+// Ajustes manuales durante la sesión. El orden confirmado al asignar una ruta
+// se guarda además en cada pedido y se recupera incluso al recargar la página.
 const _ordenLote = new Map();   // "fecha|subtítulo" -> [ids de pedido en orden]
 
 function _claveOrden(subtitulo) { return state.fecha + "|" + (subtitulo || ""); }
@@ -2183,7 +2183,9 @@ function guardarOrdenLote(subtitulo, ids) {
 // ordenó —uno nuevo del mismo repartidor— quedan al final.
 function aplicarOrdenGuardado(pedidos, subtitulo) {
   const ids = _ordenLote.get(_claveOrden(subtitulo));
-  if (!ids) return [...pedidos];
+  if (!ids) return [...pedidos].sort(
+    (a, b) => (a.orden_ruta ?? 1e9) - (b.orden_ruta ?? 1e9)
+  );
   const pos = new Map(ids.map((id, i) => [id, i]));
   return [...pedidos].sort(
     (a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e9) - (pos.has(b.id) ? pos.get(b.id) : 1e9)
@@ -2287,7 +2289,9 @@ function contactoLote(pedidos, subtitulo) {
       cobro,
     ].filter(Boolean).join("\n");
   });
-  return cab + "\n\n" + bloques.join("\n————————\n");
+  const ruta = googleMapsRouteLink(pedidos.map((p) => p.cliente_direccion));
+  return cab + "\n\n" + bloques.join("\n————————\n")
+    + (ruta ? "\n\n🗺️ Ruta completa (orden de entrega):\n" + ruta : "");
 }
 
 function openTicketLote(pedidos, titulo) {
@@ -2305,7 +2309,7 @@ function openTicketLote(pedidos, titulo) {
   $("ticket-wa").style.display = "none";
   $("ticket-ruta").style.display = "none";
   $("ticket-maps-query").textContent = "";
-  $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos y direcciones de todos los pedidos.";
+  $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos, direcciones y el enlace de la ruta completa en el mismo orden de entrega.";
   refrescarTicketLote();
   $("modal-ticket").classList.add("show");
 }
