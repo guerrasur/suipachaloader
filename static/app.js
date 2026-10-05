@@ -2289,7 +2289,8 @@ function contactoLote(pedidos, subtitulo) {
       cobro,
     ].filter(Boolean).join("\n");
   });
-  const ruta = googleMapsRouteLink(pedidos.map((p) => p.cliente_direccion));
+  const ruta = pedidos.length > 1
+    ? googleMapsRouteLink(pedidos.map((p) => p.cliente_direccion)) : "";
   return cab + "\n\n" + bloques.join("\n————————\n")
     + (ruta ? "\n\n🗺️ Ruta completa (orden de entrega):\n" + ruta : "");
 }
@@ -2309,7 +2310,9 @@ function openTicketLote(pedidos, titulo) {
   $("ticket-wa").style.display = "none";
   $("ticket-ruta").style.display = "none";
   $("ticket-maps-query").textContent = "";
-  $("ticket-hint").textContent = "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos, direcciones y el enlace de la ruta completa en el mismo orden de entrega.";
+  $("ticket-hint").textContent = pedidos.length > 1
+    ? "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia teléfonos, direcciones y el enlace de la ruta completa en el mismo orden de entrega."
+    : "Copiá la imagen y pegala en el chat del repartidor. \"Copiar contactos\" copia el teléfono y la dirección del pedido.";
   refrescarTicketLote();
   $("modal-ticket").classList.add("show");
 }

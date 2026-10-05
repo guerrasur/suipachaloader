@@ -84,8 +84,8 @@ automáticamente. Al arrancar:
   orden confirmado con "Confirmar y asignar todo" se guarda por repartidor y
   se recupera al abrir su ticket, incluso después de recargar la página. Los
   ajustes manuales posteriores en el ticket se mantienen durante la sesión.
-  "Copiar contactos" agrega al final el enlace de la ruta completa en ese
-  mismo orden, desde la dirección del local.
+  Con dos o más pedidos, "Copiar contactos" agrega al final el enlace de la
+  ruta completa en ese mismo orden, desde la dirección del local.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Salida programada:** un envío puede quedar cargado con una hora prevista de
