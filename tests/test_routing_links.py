@@ -109,5 +109,23 @@ def test_ruta_de_una_sola_parada_no_lleva_waypoints():
     assert _destino(link) == f"Lavalle 1268, {CIUDAD}"
 
 
+def test_ruta_optimizada_vuelve_al_local():
+    link = google_maps_route_link(
+        "Suipacha 100",
+        ["Lavalle 1268", "Esmeralda 1080", "Paraguay 1536"],
+        CIUDAD,
+        volver_al_origen=True,
+    )
+    query = parse_qs(urlparse(link).query)
+    local = f"Suipacha 100, {CIUDAD}"
+    assert query["origin"][0] == local
+    assert query["destination"][0] == local
+    assert _waypoints(link) == [
+        f"Lavalle 1268, {CIUDAD}",
+        f"Esmeralda 1080, {CIUDAD}",
+        f"Paraguay 1536, {CIUDAD}",
+    ]
+
+
 def test_ruta_sin_paradas():
     assert google_maps_route_link("Suipacha 100", [], CIUDAD) == ""
