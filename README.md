@@ -85,7 +85,8 @@ automáticamente. Al arrancar:
   se recupera al abrir su ticket, incluso después de recargar la página. Los
   ajustes manuales posteriores en el ticket se mantienen durante la sesión.
   Con dos o más pedidos, "Copiar contactos" agrega al final el enlace de la
-  ruta completa en ese mismo orden, desde la dirección del local.
+  ruta completa en ese mismo orden, saliendo desde la dirección del local y
+  volviendo al mismo local como punto final.
 - **Tabla del día** editable inline (repartidor, hora de salida, facturado,
   notas), filtros rápidos y navegación entre días.
 - **Salida programada:** un envío puede quedar cargado con una hora prevista de
