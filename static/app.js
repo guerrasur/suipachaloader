@@ -1392,7 +1392,7 @@ function renderRutas(r) {
     const g = r.grupos[gi];
     const link = cont.querySelector(`.rutas-maps[data-gi="${gi}"]`);
     const pintarLink = () => {
-      link.href = googleMapsRouteLink(g.pedidos.map((p) => p.cliente_direccion));
+      link.href = googleMapsRouteLink(g.pedidos.map((p) => p.cliente_direccion), null, true);
     };
     renderListaOrden(
       ol,
@@ -2110,14 +2110,15 @@ function googleMapsSearchLink(direccion) {
 // Ruta multi-parada en el orden recibido. Espejo de `google_maps_route_link` en
 // app/routing.py: se arma acá también porque el orden lo puede cambiar el
 // usuario a mano después de que la API devolvió el suyo.
-function googleMapsRouteLink(direccionesEnOrden, origenAnterior = null) {
+function googleMapsRouteLink(direccionesEnOrden, origenAnterior = null, volverAlOrigen = false) {
   const paradas = (direccionesEnOrden || []).map(direccionParaMaps).filter(Boolean);
   if (!paradas.length) return "";
   const origen = direccionParaMaps(origenAnterior || ((_cfgCache && _cfgCache.direccion_local) || ""));
+  const destino = volverAlOrigen && origen ? origen : paradas[paradas.length - 1];
+  const intermedias = volverAlOrigen && origen ? paradas : paradas.slice(0, -1);
   let url = "https://www.google.com/maps/dir/?api=1&destination="
-    + encodeURIComponent(paradas[paradas.length - 1]) + "&travelmode=driving";
+    + encodeURIComponent(destino) + "&travelmode=driving";
   if (origen) url += "&origin=" + encodeURIComponent(origen);
-  const intermedias = paradas.slice(0, -1);
   if (intermedias.length) {
     url += "&waypoints=" + intermedias.map(encodeURIComponent).join("|");
   }
@@ -2290,7 +2291,7 @@ function contactoLote(pedidos, subtitulo) {
     ].filter(Boolean).join("\n");
   });
   const ruta = pedidos.length > 1
-    ? googleMapsRouteLink(pedidos.map((p) => p.cliente_direccion)) : "";
+    ? googleMapsRouteLink(pedidos.map((p) => p.cliente_direccion), null, true) : "";
   return cab + "\n\n" + bloques.join("\n————————\n")
     + (ruta ? "\n\n🗺️ Ruta completa (orden de entrega):\n" + ruta : "");
 }
@@ -2323,7 +2324,7 @@ function pintarTicketLote() {
   drawTicketLote(pedidos, _ticketSubtitulo);
   const maps = $("ticket-maps");
   const direcciones = pedidos.map((p) => (p.cliente_direccion || "").trim()).filter(Boolean);
-  const link = googleMapsRouteLink(direcciones);
+  const link = googleMapsRouteLink(direcciones, null, true);
   maps.style.display = link ? "" : "none";
   maps.href = link || "#";
   maps.textContent = direcciones.length > 1 ? "🗺️ Ver ruta en Maps" : "🗺️ Ver dirección en Maps";
