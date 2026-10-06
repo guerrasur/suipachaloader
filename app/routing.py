@@ -275,16 +275,32 @@ def direccion_para_maps(direccion: str, ciudad: str = "") -> str:
     return limpia
 
 
-def google_maps_route_link(origen: str, direcciones_en_orden: list[str], ciudad: str = "") -> str:
-    """Link de Google Maps con ruta multi-parada, sin necesitar API key."""
+def google_maps_route_link(
+    origen: str,
+    direcciones_en_orden: list[str],
+    ciudad: str = "",
+    volver_al_origen: bool = False,
+) -> str:
+    """Link de Google Maps con ruta multi-parada, sin necesitar API key.
+
+    Si volver_al_origen es True, la última parada es el mismo local de salida
+    y todos los pedidos quedan como puntos intermedios.
+    """
     if not direcciones_en_orden:
         return ""
     paradas = [direccion_para_maps(d, ciudad) for d in direcciones_en_orden]
-    destino = quote(paradas[-1], safe="")
+    origen_maps = direccion_para_maps(origen, ciudad) if origen else ""
+
+    if volver_al_origen and origen_maps:
+        destino = quote(origen_maps, safe="")
+        intermedias = paradas
+    else:
+        destino = quote(paradas[-1], safe="")
+        intermedias = paradas[:-1]
+
     partes = [f"https://www.google.com/maps/dir/?api=1&destination={destino}&travelmode=driving"]
-    if origen:
-        partes.append(f"&origin={quote(direccion_para_maps(origen, ciudad), safe='')}")
-    intermedias = paradas[:-1]
+    if origen_maps:
+        partes.append(f"&origin={quote(origen_maps, safe='')}")
     if intermedias:
         waypoints = "|".join(quote(d, safe="") for d in intermedias)
         partes.append(f"&waypoints={waypoints}")
