@@ -13,7 +13,8 @@ from .. import config as cfg
 from ..database import get_db
 from ..geocoding import geocode
 from ..models import Pedido, RepartidorDia
-from ..routing import agrupar_por_cercania, google_maps_route_link, ordenar_ruta
+from ..routing import google_maps_route_link
+from ..route_costs import travel_costs, distribute, order, cost
 
 router = APIRouter(prefix="/api/rutas", tags=["rutas"])
 
@@ -67,17 +68,17 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
 
     origen = geocode(db, direccion_local, ciudad_default) if direccion_local else None
 
-    grupos_idx = agrupar_por_cercania(coords, len(nombres))
+    matrix, criterio, aviso = travel_costs(origen, coords)
+    grupos_idx = distribute(matrix, coords, len(nombres))
 
     grupos = []
     for i, idxs in enumerate(grupos_idx):
         etiqueta = chr(ord("A") + i)
-        puntos_grupo = [coords[j] for j in idxs]
-        orden_local = ordenar_ruta(origen, puntos_grupo)
-        pedidos_en_orden = [ubicados[idxs[k]] for k in orden_local]
+        pedidos_en_orden = [ubicados[j] for j in idxs]
         direcciones = [p.cliente_direccion for p in pedidos_en_orden]
         grupos.append({
             "etiqueta": etiqueta,
+            "minutos_estimados": round(cost(matrix, idxs) / 60, 1) if criterio == "calles" else None,
             "pedidos": [
                 {"id": p.id, "numero": p.numero, "cliente_nombre": p.cliente_nombre,
                  "cliente_direccion": p.cliente_direccion, "cliente_telefono": p.cliente_telefono}
@@ -91,6 +92,8 @@ def optimizar(fecha: date | None = None, db: Session = Depends(get_db)):
     return {
         "fecha": fecha.isoformat(),
         "repartidores_dia": nombres,
+        "criterio": criterio,
+        "aviso": aviso,
         "grupos": grupos,
         "sin_geocodificar": [
             {"id": p.id, "numero": p.numero, "cliente_nombre": p.cliente_nombre,
@@ -148,12 +151,15 @@ def optimizar_repartidor(repartidor: str, fecha: date | None = None, db: Session
         raise HTTPException(400, "No se pudieron ubicar suficientes direcciones para armar la ruta.")
 
     origen = geocode(db, direccion_local, ciudad_default) if direccion_local else None
-    orden = ordenar_ruta(origen, coords)
+    matrix, criterio, aviso = travel_costs(origen, coords)
+    orden = order(matrix)
     pedidos_en_orden = [ubicados[i] for i in orden]
     direcciones = [p.cliente_direccion for p in pedidos_en_orden]
 
     return {
         "repartidor": repartidor,
+        "criterio": criterio,
+        "aviso": aviso,
         "maps_link": google_maps_route_link(
             direccion_local, direcciones, ciudad_default, volver_al_origen=True
         ),

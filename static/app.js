@@ -1349,12 +1349,13 @@ function renderRutas(r) {
     return;
   }
   const nombres = r.repartidores_dia || [];
-  let html = "";
+  let html = r.aviso ? `<p class="banner warn">${escapeHtml(r.aviso)}</p>` : `<p class="muted">Orden y reparto según tiempo de viaje por calles, con regreso al local. Sin tráfico en vivo.</p>`;
   r.grupos.forEach((g, gi) => {
     const preseleccion = nombres[gi] || "";
     html += `
       <div class="card" style="margin-top:.8rem;">
         <h3 style="margin:0 0 .4rem;">🛵 Repartidor ${escapeHtml(g.etiqueta)} — ${g.pedidos.length} parada${g.pedidos.length === 1 ? "" : "s"}</h3>
+        ${g.minutos_estimados != null ? `<p class="muted">Viaje estimado: ${g.minutos_estimados} min · incluye regreso, sin tiempo de entrega.</p>` : ""}
         <ol class="orden-lista rutas-orden" data-gi="${gi}"></ol>
         <div class="row" style="flex-wrap:wrap;align-items:center;margin-top:.6rem;">
           <a class="btn secondary sm rutas-maps" data-gi="${gi}" href="#" target="_blank" rel="noopener">🗺️ Abrir ruta en Google Maps</a>
@@ -1698,25 +1699,23 @@ $("btn-mapa-pendientes").addEventListener("click", () => {
     tramos.push({ grupo, link, primero: i + 1 });
   }
 
-  if (tramos.length === 1 && tramos[0].link && tramos[0].link.length <= 2048) {
-    window.open(tramos[0].link, "_blank", "noopener");
-  } else {
-    $("mapa-pendientes-info").textContent =
-      `${pendientes.length} pedidos, ${paradas.length} direcciones distintas. `
-      + "Maps limita las paradas por enlace; abrí los tramos en orden. "
-      + "El orden mostrado es el de carga, no una ruta optimizada."
-      + (sinDireccion ? ` ${sinDireccion} pedido${sinDireccion === 1 ? "" : "s"} sin dirección ${sinDireccion === 1 ? "queda" : "quedan"} fuera.` : "");
-    $("mapa-pendientes-contenido").innerHTML = tramos.map(({ grupo, link, primero }, i) => `
+  const completo = googleMapsRouteLink(paradas.map((p) => p.direccion));
+  $("mapa-pendientes-info").textContent =
+    `${pendientes.length} pedidos, ${paradas.length} direcciones distintas. `
+    + "Abrí todos juntos o elegí los tramos. El orden es el de carga."
+    + (sinDireccion ? ` ${sinDireccion} sin dirección quedan fuera.` : "");
+  $("mapa-pendientes-contenido").innerHTML = `
+    <a class="btn" href="${escapeAttr(completo)}" target="_blank" rel="noopener">🗺️ Ver todos de una en Google Maps</a>
+    <p class="muted">Google Maps puede limitar las paradas según el dispositivo. Si omite alguna, usá los tramos.</p>
+    <details><summary class="btn secondary">Ver por tramos</summary>`
+    + tramos.map(({ grupo, link, primero }, i) => `
       <div class="card" style="margin:.6rem 0;padding:.8rem;">
         <strong>Tramo ${i + 1} · paradas ${primero}–${primero + grupo.length - 1}</strong>
         <ol style="margin:.4rem 0 .7rem;">${grupo.map((p) =>
           `<li>${escapeHtml(p.direccion)}</li>`).join("")}</ol>
-        ${link.length <= 2048
-          ? `<a class="btn secondary sm" href="${escapeAttr(link)}" target="_blank" rel="noopener">Abrir tramo en Google Maps</a>`
-          : `<p class="banner warn">Este tramo tiene direcciones demasiado largas para un enlace de Maps.</p>`}
-      </div>`).join("");
-    $("modal-mapa-pendientes").classList.add("show");
-  }
+        <a class="btn secondary sm" href="${escapeAttr(link)}" target="_blank" rel="noopener">Abrir tramo en Google Maps</a>
+      </div>`).join("") + "</details>";
+  $("modal-mapa-pendientes").classList.add("show");
   if (sinDireccion) {
     toast(`${sinDireccion} pedido${sinDireccion === 1 ? "" : "s"} sin dirección no ${sinDireccion === 1 ? "se incluyó" : "se incluyeron"} en el mapa.`, "info");
   }
@@ -2397,6 +2396,7 @@ $("ticket-ruta").addEventListener("click", async () => {
     const r = await api(
       `/api/rutas/repartidor?fecha=${state.fecha}&repartidor=${encodeURIComponent(p.repartidor)}`
     );
+    if (r.aviso) toast(r.aviso, "info");
     await navigator.clipboard.writeText(`Ruta Optimizada: ${r.maps_link}`);
     btn.textContent = "✅ Ruta copiada";
   } catch (e) {

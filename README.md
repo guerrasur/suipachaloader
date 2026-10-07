@@ -154,3 +154,21 @@ Los datos (base SQLite, `backups/` y `exports/`) se guardan en
 - El Excel de referencia que se usó para el layout venía con celdas
   combinadas rotas (`H1:A1`); la exportación de esta app genera archivos
   limpios, sin fórmulas ni ese desorden.
+
+### Rutas de reparto
+
+La optimización consulta tiempos de viaje por calles a OSRM y calcula el
+recorrido completo: local → entregas → local. Respeta costos distintos según
+el sentido de circulación, sin tráfico en vivo ni tiempo de entrega. Para
+hasta 12 paradas por ruta obtiene el orden mínimo exacto. Con dos repartidores
+y hasta 12 pedidos compara también todas las distribuciones y prioriza reducir
+la ruta más larga; desempata por el tiempo total. Para volúmenes mayores o más
+repartidores utiliza mejoras heurísticas, sin garantizar el óptimo global.
+
+Si no puede consultar OSRM, usa distancias geográficas e informa que el resultado
+es aproximado. Si no puede ubicar el local, muestra un aviso para revisar su
+dirección. Los minutos estimados sólo se muestran cuando se consultaron calles.
+
+“Ver todos en Maps” ofrece primero un enlace con todas las direcciones; “Ver por
+tramos” queda como alternativa desplegable. Google Maps puede limitar las paradas
+según el dispositivo, por lo que los tramos siguen disponibles si omite alguna.
