@@ -23,14 +23,14 @@ def test_return_changes_order():
     assert rc.order(matrix) == [1, 0]
 
 
-def test_two_couriers_minimize_longest_complete_tour():
+def test_two_couriers_minimize_total_complete_travel():
     rng = Random(4)
     matrix = [[0 if i == j else rng.randint(1, 100) for j in range(7)] for i in range(7)]
     groups = rc.distribute(matrix, [(0, i) for i in range(6)], 2)
     assert sorted(i for g in groups for i in g) == list(range(6))
     def score(gs):
         values = [rc.cost(matrix, g) for g in gs]
-        return max(values), sum(values)
+        return sum(values), max(values)
     best = min(score([list(a), list(b)]) for mask in range(1, 63)
                for a in permutations([i for i in range(6) if mask & (1 << i)])
                for b in permutations([i for i in range(6) if not mask & (1 << i)]))
@@ -102,3 +102,43 @@ def test_routes_endpoints_use_closed_street_tour(client, monkeypatch):
     assert [p['id'] for p in result['grupos'][0]['pedidos']] == ids[::-1]
     result = client.get('/api/rutas/repartidor?repartidor=Ana').json()
     assert [p['id'] for p in result['pedidos']] == ids[::-1]
+
+
+@pytest.mark.parametrize('input_order', list(permutations(range(3))))
+def test_suipacha_groups_rodriguez_pena_with_cerrito(monkeypatch, input_order):
+    # Coordinates from the reported Maps route. Exercise the geographic fallback
+    # without depending on OSRM availability or the order in which orders arrive.
+    origin = (-34.6041469, -58.3794833)  # Suipacha 356
+    addresses = [
+        (-34.59368, -58.392243),      # Rodríguez Peña 1336
+        (-34.6043188, -58.3712629),   # Sarmiento 310
+        (-34.5959155, -58.3830489),   # Cerrito 1070
+    ]
+    monkeypatch.setattr(rc, '_street_table', Mock(side_effect=requests.Timeout))
+    points = [addresses[i] for i in input_order]
+    matrix, criterion, _ = rc.travel_costs(origin, points)
+    assert criterion == 'geografica'
+    groups = rc.distribute(matrix, points, 2)
+    assert {frozenset(input_order[i] for i in g) for g in groups} == {
+        frozenset({0, 2}), frozenset({1}),
+    }
+
+
+def test_directed_distribution_avoids_extra_travel_to_balance_couriers():
+    # Depot, north-west, east, north. Balance alone selects NW | east+north
+    # (20+19). Grouping NW+north | east is less total travel (21+10).
+    matrix = [[0, 10, 5, 8], [10, 0, 15, 3], [5, 15, 0, 6], [8, 4, 7, 0]]
+    groups = rc.distribute(matrix, [(0, i) for i in range(3)], 2)
+    assert {frozenset(g) for g in groups} == {frozenset({0, 2}), frozenset({1})}
+    assert sum(rc.cost(matrix, g) for g in groups) == 31
+
+
+def test_more_couriers_improve_total_travel_without_losing_orders():
+    rng = Random(8)
+    matrix = [[0 if i == j else rng.randint(1, 100) for j in range(10)] for i in range(10)]
+    points = [(0, i) for i in range(9)]
+    initial = [rc.order(matrix, g) for g in rc.agrupar_por_cercania(points, 3)]
+    groups = rc.distribute(matrix, points, 3)
+    assert len(groups) == 3 and all(groups)
+    assert sorted(i for g in groups for i in g) == list(range(9))
+    assert sum(rc.cost(matrix, g) for g in groups) <= sum(rc.cost(matrix, g) for g in initial)

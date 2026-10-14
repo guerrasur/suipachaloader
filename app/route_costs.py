@@ -16,7 +16,7 @@ def _street_table(points: tuple, hour: int) -> tuple:
     response = requests.get(
         f'https://router.project-osrm.org/table/v1/driving/{coordinates}',
         params={'annotations': 'duration'}, timeout=(4, 12),
-        headers={'User-Agent': 'SuipachaLoader/1.18.6'},
+        headers={'User-Agent': 'SuipachaLoader/1.18.7'},
     )
     response.raise_for_status()
     data = response.json()
@@ -118,7 +118,12 @@ def order(matrix, indices=None):
 
 
 def distribute(matrix, points, k):
-    """Minimize longest tour, then total travel; keep every courier nonempty."""
+    """Minimize total travel, then longest tour; keep every courier nonempty.
+
+    Balancing couriers first can split nearby deliveries to shorten the slowest
+    tour at the expense of extra travel across all routes. Use balance only to
+    break ties, with the same objective in exact and heuristic distribution.
+    """
     n = len(points)
     k = min(max(1, k), n)
     if not n:
@@ -132,7 +137,7 @@ def distribute(matrix, points, k):
         full = (1 << n) - 1
         def score(mask):
             a, b = tours[mask][0], tours[full ^ mask][0]
-            return max(a, b), a + b, mask
+            return a + b, max(a, b), mask
         mask = min((m for m in range(1, full) if m & 1), key=score)
         return [list(tours[mask][1]), list(tours[full ^ mask][1])]
     groups = [order(matrix, g) for g in agrupar_por_cercania(points, k)]
@@ -144,7 +149,7 @@ def distribute(matrix, points, k):
         return cache[key]
     def score(gs):
         values = [cost(matrix, g) for g in gs]
-        return max(values), sum(values)
+        return sum(values), max(values)
     for _ in range(12):
         best, best_score = groups, score(groups)
         for a in range(k):
