@@ -72,6 +72,7 @@ class ClienteIn(BaseModel):
 class ClienteOut(ClienteIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    ultimo_metodo_pago: str | None = None
 
 
 # --- Platos -----------------------------------------------------------------

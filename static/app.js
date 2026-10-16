@@ -739,6 +739,10 @@ setupAutocomplete("f-cliente", "ac-cliente", async (q) => {
       $("f-direccion").value = c.direccion || "";
       $("f-telefono").value = c.telefono || "";
       $("f-indicaciones").value = c.indicaciones || "";
+      $("f-pago").value = c.ultimo_metodo_pago || "Efectivo";
+      $("f-vuelto").value = "";
+      toggleVuelto();
+      reapplyPrices();
       if (c.descuento_tipo) {
         $("f-desc-tipo").value = c.descuento_tipo;
         $("f-desc-valor").value = c.descuento_valor;

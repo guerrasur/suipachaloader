@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Cliente, CuentaCliente
+from ..models import Cliente, CuentaCliente, Pedido
 from ..schemas import ClienteIn, ClienteOut
 
 router = APIRouter(prefix="/api/clientes", tags=["clientes"])
@@ -20,7 +20,20 @@ def agenda(db: Session = Depends(get_db)):
 
 @router.get("", response_model=list[ClienteOut])
 def listar(q: str = "", db: Session = Depends(get_db)):
-    query = db.query(Cliente)
+    # Nombre y dirección identifican al cliente en los pedidos históricos.
+    ultimo_pago = (
+        select(Pedido.metodo_pago)
+        .where(
+            Pedido.cliente_nombre == Cliente.nombre,
+            Pedido.cliente_direccion == Cliente.direccion,
+            Pedido.anulado.is_(False),
+        )
+        .order_by(Pedido.hora_pedido.desc(), Pedido.id.desc())
+        .limit(1)
+        .correlate(Cliente)
+        .scalar_subquery()
+    )
+    query = db.query(Cliente, ultimo_pago)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -31,7 +44,10 @@ def listar(q: str = "", db: Session = Depends(get_db)):
             )
         )
     # Nunca asumir que un nombre es único: se ordena por nombre + dirección.
-    return query.order_by(Cliente.nombre, Cliente.direccion).limit(20).all()
+    return [
+        ClienteOut.model_validate(cliente).model_copy(update={"ultimo_metodo_pago": pago})
+        for cliente, pago in query.order_by(Cliente.nombre, Cliente.direccion).limit(20).all()
+    ]
 
 
 @router.post("", response_model=ClienteOut)

@@ -64,3 +64,31 @@ def test_agenda_lista_todos_y_borrado_no_altera_pedidos(client):
     assert client.delete(f"/api/clientes/{original['id']}").status_code == 404
     assert any(p["id"] == pedido.json()["id"] and p["cliente_nombre"] == "Histórico"
                for p in client.get("/api/pedidos").json())
+
+
+def test_autocomplete_ultimo_pago_por_cliente(client):
+    from datetime import datetime
+    from app.database import SessionLocal
+    from app.models import Pedido
+
+    _crear(client, nombre="Ana", direccion="Calle 1")
+    _crear(client, nombre="Ana", direccion="Calle 2")
+    _crear(client, nombre="Nueva")
+    with SessionLocal() as db:
+        db.add_all([
+            Pedido(cliente_nombre="Ana", cliente_direccion="Calle 1", metodo_pago="Efectivo", hora_pedido=datetime(2026, 1, 1)),
+            Pedido(cliente_nombre="Ana", cliente_direccion="Calle 1", metodo_pago="Transferencia", hora_pedido=datetime(2026, 1, 2)),
+            Pedido(cliente_nombre="Ana", cliente_direccion="Calle 1", metodo_pago="Efectivo", hora_pedido=datetime(2026, 1, 3), anulado=True),
+            Pedido(cliente_nombre="Ana", cliente_direccion="Calle 2", metodo_pago="Efectivo", hora_pedido=datetime(2026, 1, 4)),
+        ])
+        db.commit()
+    resultados = {c["direccion"]: c for c in client.get("/api/clientes?q=Ana").json()}
+    assert resultados["Calle 1"]["ultimo_metodo_pago"] == "Transferencia"
+    assert resultados["Calle 2"]["ultimo_metodo_pago"] == "Efectivo"
+    assert client.get("/api/clientes?q=Nueva").json()[0]["ultimo_metodo_pago"] is None
+    # Una corrección de pago en el historial se toma en la próxima selección.
+    with SessionLocal() as db:
+        p = db.query(Pedido).filter_by(cliente_direccion="Calle 1", metodo_pago="Transferencia").one()
+        p.metodo_pago = "Efectivo"
+        db.commit()
+    assert client.get("/api/clientes?q=Calle 1").json()[0]["ultimo_metodo_pago"] == "Efectivo"
